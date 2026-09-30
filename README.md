@@ -11,6 +11,8 @@ Starter project sistem manajemen apotek untuk tugas akhir. Repo berisi scaffold 
 
 Lihat [docs/SETUP.md](docs/SETUP.md) untuk menjalankan project dan [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) untuk struktur dan batas tanggung jawab tiap bagian.
 
+Brief produk ada di [docs/PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md). Untuk development dengan Kimi Code, jalankan `./scripts/start-kimi.sh` lalu gunakan prompt di [docs/KIMI_FIRST_PROMPT.md](docs/KIMI_FIRST_PROMPT.md). Profil spesialis ada di `.agents/agents/`.
+
 ## Jalankan
 
 Butuh Docker Desktop dan Docker Compose.
