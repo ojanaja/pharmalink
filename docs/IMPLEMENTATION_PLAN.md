@@ -99,6 +99,12 @@ Void = status + movement reversal (tanpa hapus baris); retur ke batch asal; pemb
 
 Fondasi token CSS + komponen bersama (sidebar, top bar, tabel, form, badge, modal, tombol) → auth + shell → Persediaan → Kasir → Pembelian → Dashboard → Laporan → Pengaturan/User → flow advanced. Dependensi yang disarankan: react-router-dom, Tailwind v4, lucide-react, @tanstack/react-table, react-hook-form + zod, @tanstack/react-query, recharts. Instalasi saat frontend mulai, dicek terhadap lockfile.
 
+#### F1 — Fondasi frontend ✅ selesai 2026-09-30
+
+Dependensi: react-router-dom 7, tailwindcss v4 + @tailwindcss/vite, lucide-react, @tanstack/react-query (react-hook-form/zod, react-table, recharts ditunda). Token CSS halaman 01 lengkap di @theme. Komponen ui (Button, Badge, Field/Input/Select, Modal, StatCard, Pagination) + layout (Sidebar 240px #123C35, Topbar 72px, AppShell) + auth (api client Bearer, AuthContext, route guard, LoginPage) + router + PlaceholderPage per menu. Persediaan = tabel nyata GET /api/medicines dengan chip status (Aman/Menipis/Habis), skeleton/empty/error state. Template default dihapus.
+
+Pemeriksaan: `tsc --noEmit` 0, `npm run build` sukses, oxlint 0/0, curl :5173 200, proxy /api → backend terbukti.
+
 ## Pemeriksaan yang dijalankan
 
 - 2026-09-30: audit repo/Git/Docker/dependency (manual, lihat "Keadaan awal").
@@ -106,15 +112,17 @@ Fondasi token CSS + komponen bersama (sidebar, top bar, tabel, form, badge, moda
 - 2026-09-30 M1: API test black-box 27/27 skenario sesuai kontrak (login, otorisasi role, validasi 422, pagination/search, logout, token invalid). Temuan A1–A3 diperbaiki dan diverifikasi ulang.
 - 2026-09-30 M2: `php artisan test` 32 passed / 109 assertions. API test black-box 12/12 skenario sesuai (penerimaan atomik + rollback bersih, nomor RCV berurutan, kartu stok + filter, batches FEFO + expiring_within, invarian saldo hold). Dua catatan tester terbukti stale saat diverifikasi ulang langsung (locale id dan APP_DEBUG=false berlaku).
 - 2026-09-30 M3: `php artisan test` 44 passed / 179 assertions (3 regression diskon + reference.number). API test black-box 11/12 lalu defect diskon (A1) diperbaiki + terverifikasi curl; FEFO, rollback total, snapshot harga, invarian batch habis terbukti.
+- 2026-09-30 F1 frontend: tsc 0 error, vite build sukses, oxlint 0/0, :5173 200, proxy /api terbukti.
+- Catatan proses: code review independen backend (agent terblokir TCC Documents saat M1) belum pernah berjalan penuh; verifikasi selama ini lewat test suite + API test black-box + verifikasi langsung lead.
 - Belum: code review independen (agent reviewer terblokir izin macOS Documents; penggantinya review temuan API test + test suite). Akses kategori/satuan hanya GET/POST (A4) dan perbedaan envelope list (A5) dicatat untuk konsumsi frontend.
 
-## Pertanyaan terbuka (blokir UI, tidak blokir M1–M2 backend)
+## Pertanyaan terbuka — DITUTUP 2026-09-30 (keputusan user: ikut asumsi default)
 
-1. **Shell kanonik** — file Figma punya 4 varian (Sehat Sentosa, Klinik Sembada, ApotekOS, PharmaLink Inventory). Asumsi kerja: shell A "Apotek Sehat Sentosa". Perlu konfirmasi.
-2. **Form CRUD master obat tidak ada di Figma** — tombol "Tambah Obat" ada di Persediaan, formnya tidak. Perlu desain/konfirmasi sebelum implementasi master obat UI.
-3. **Duplikat layar** (Pembelian #42:1663 vs #50:823, Detail Obat, Stok) — mana yang kanonik perlu konfirmasi.
-4. **Inkonsistensi palet** — sebagian layar memakai teal (`#087E7A`) vs hijau (`#087F6A`). Design system halaman 01 memakai `#087F6A`; asumsi: 01 sebagai sumber kebenaran.
-5. **Pembayaran tunai saja vs multi-metode** — Figma menampilkan Tunai/QRIS/Debit/Transfer; backend mencatat `payment_method` string. Perlu konfirmasi apakah validasi kas (bayar/kembalian) dihitung di client saja.
+1. Shell kanonik: **A "Apotek Sehat Sentosa"** (sidebar `#123C35`, menu sesuai brief).
+2. Form CRUD master obat: tidak ada di Figma → disusun dari komponen design system halaman 03 (Forms).
+3. Duplikat layar: versi shell A (#50:*, Pembelian #50:823, Detail Obat #50:1452, Persediaan #50:56) yang kanonik.
+4. Palet: halaman 01 foundations sumber kebenaran (`#087F6A` primer, teal di layar lain abaikan).
+5. Pembayaran: tunai dulu; `payment_method` varchar tetap ada, multi-metode menyusul bila perlu.
 6. **4 role di layar User & Hak Akses** vs 2 role di brief — konfirmasi scope role.
 
 ## Risiko
