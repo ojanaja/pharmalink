@@ -79,21 +79,29 @@ Hasil: SaleService satu transaksi atomik — harga server-side (client tidak kir
 
 Pemeriksaan: `php artisan test` 44 passed / 179 assertions (termasuk 3 regression). API test black-box 11/12 awal — FEFO terbukti dengan urutan batch benar, rollback total terbukti, snapshot harga tahan perubahan master. Defect billing ditemukan (diskon integer ter-skala ÷100 karena parser sen mengasumsikan string desimal) → diperbaiki lewat normalisasi uang (integer = Rupiah penuh) + regression test; reference.number movement sale kini terisi invoice_number. Catatan: TRX uji probe diskon lama (nilai diskon 10.00/0.50 yang salah) tersisa di DB dev — data historis, tidak dikoreksi manual (demonstrasi ketertelusuran).
 
-### M4 — Purchase Order + penerimaan PO
+### M4 — Purchase Order + penerimaan PO ✅ selesai 2026-10-01
 
-PO tidak mengubah stok; konfirmasi penerimaan (parsial boleh) menambah batch/stok + movement + status PO.
+Hasil: PurchaseOrderService (PO-{ymd}-{seq4}, status ordered, harga beli fallback pivot medicine_supplier, total dihitung dari items bukan disimpan), PurchaseService::receive satu transaksi (lock per po_item, over-receipt 422 terstruktur + rollback, batch merge, status ordered/partially_received/received), monthly summary dari data receipt. Policy owner & apoteker.
 
-### M5 — Koreksi + stock opname
+Pemeriksaan: `php artisan test` 57 passed / 255 assertions (2 regression batch). API test black-box 11/12 awal — PO tidak mengubah stok terbukti, rekap bulanan rekonsiliasi manual 100% akurat. Defect integritas ditemukan: guard batch hanya match (medicine_id, batch_number) sehingga nomor batch duplikat antar obat lolos → diperbaiki lewat BatchService terpusat (satu nomor batch = identitas fisik: duplikat antar obat atau expiry beda selalu 422), artefak uji dibersihkan di DB dev.
 
-Koreksi ber-alasan wajib; opname: snapshot sistem → input fisik → preview selisih → konfirmasi baru tulis movement.
+### M5 — Koreksi + stock opname ✅ selesai 2026-10-01
 
-### M6 — Dashboard + laporan + ekspor
+Hasil: migration stock_adjustments (alasan+user terstruktur, reference movement terisi), StockAdjustmentService (movement adjustment, saldo kurang 422 rollback, reason wajib min 5), StockOpnameService 3 tahap sesuai Figma (snapshot lockForUpdate semua batch berstok → input fisik bertahap dengan alasan wajib saat selisih → confirm satu transaksi menulis movement hanya untuk selisih ≠ 0, status confirmed immutable 409). Stok berubah hanya saat confirm. Policy owner & apoteker.
 
-Widget dashboard per brief (angka query nyata), 5 laporan per periode, ekspor CSV/XLSX.
+Pemeriksaan: `php artisan test` 69 passed / 334 assertions. API test black-box 12/12 sesuai — snapshot 15/15 batch akurat, immutability + rollback terbukti, movement opname hanya untuk selisih. Minor: reference.number StockAdjustment diisi "ADJ-{id}".
 
-### M7 — Retur/pembatalan + hardening
+### M6 — Dashboard + laporan + ekspor ✅ selesai 2026-10-01
 
-Void = status + movement reversal (tanpa hapus baris); retur ke batch asal; pembulatan Rupiah; uji konkurensi; dokumentasi sidang.
+Hasil: DashboardService (penjualan hari ini, grafik 7 hari dengan hari kosong = 0, stok menipis/habis, kedaluwarsa pakai expiry_warning_days dari pharmacy_settings + ringkasan 30/60), ReportService 5 laporan (sales, purchases, stock, expiry, profit-loss — HPP dari purchase_price batch asal per sale_item), ReportExportService CSV (BOM, delimiter ;) + XLSX (PhpSpreadsheet v5.10, install --ignore-platform-req=ext-gd), util Money sen-integer terpusat. Keputusan: ambang expiry 30|60|90 (Figma Obat Kedaluwarsa); default periode = bulan berjalan. Bug latent diperbaiki: PharmacySetting::current() refresh.
+
+Pemeriksaan: `php artisan test` 78 passed / 398 assertions. API test black-box 9/9 sesuai dengan rekonsiliasi manual eksak (omzet, pembelian, COGS, nilai persediaan). Catatan dokumentasi: omzet per obat basis pre-diskon, summary post-diskon — selisih = total diskon.
+
+### M7 — Retur/pembatalan + hardening ✅ selesai 2026-10-01 (backend selesai)
+
+Hasil: SaleVoidService (void owner-only, guard completed + lockForUpdate, reversal ke batch asal per item, movement sale_cancellation, cancelled_reason/at/by), SaleReturnService (retur parsial bertahap dengan batas returnable 422 terstruktur, movement return_in, nomor RET-{ymd}-{seq4} via migration backfill), command `stock:reconcile` (deteksi drift snapshot vs ledger, exit 1, `--fix` tanpa menulis movement). Keputusan terdokumentasi: total sale presisi 2 digit tanpa pembulatan Rp100. 2 migration (cancelled_reason, sale_returns + return_number).
+
+Pemeriksaan: `php artisan test` 88 passed / 456 assertions. API test black-box 13/13 sesuai — rantai saldo replay konsisten, void/retur guard ketat, reconcile deteksi + fix terbukti. Perbaikan kontrak output: resource expose cancelled_* eksplisit, nomor retur konsisten.
 
 ### Frontend (dijadwalkan terpisah, bergantung klarifikasi Figma)
 
@@ -103,7 +111,23 @@ Fondasi token CSS + komponen bersama (sidebar, top bar, tabel, form, badge, moda
 
 Dependensi: react-router-dom 7, tailwindcss v4 + @tailwindcss/vite, lucide-react, @tanstack/react-query (react-hook-form/zod, react-table, recharts ditunda). Token CSS halaman 01 lengkap di @theme. Komponen ui (Button, Badge, Field/Input/Select, Modal, StatCard, Pagination) + layout (Sidebar 240px #123C35, Topbar 72px, AppShell) + auth (api client Bearer, AuthContext, route guard, LoginPage) + router + PlaceholderPage per menu. Persediaan = tabel nyata GET /api/medicines dengan chip status (Aman/Menipis/Habis), skeleton/empty/error state. Template default dihapus.
 
-Pemeriksaan: `tsc --noEmit` 0, `npm run build` sukses, oxlint 0/0, curl :5173 200, proxy /api → backend terbukti.
+#### F2 — Kasir + Detail Obat ✅ selesai 2026-10-01
+
+Kasir (/penjualan, Figma #18:2917/#18:3173): pencarian debounce, tabel hasil (stok 0 disabled), keranjang 470px stepper + hapus, diskon validasi ≤ subtotal, bayar/kembalian panel danger #FDEBED, submit POST /api/sales, layar Transaksi Berhasil (kartu 570px, nomor TRX, badge Tunai), error 422 stok per item tanpa dismiss keranjang. Detail Obat (/persediaan/:id, #50:1452): kepala + chip status, sorotan stok/batch terdekat expired/min, tabel Stok per Batch urut expiry (chip ≤30/≤60), catatan FEFO, Kartu Stok chip tipe ter-map + saldo + pagination. Keputusan: chip pembayaran hanya Tunai (lainnya disembunyikan), shortcut F2/F9 di-skip, tanpa dep baru. Penandaan Figma tak jelas: lokasi obat tidak ada di API (tidak digambar), nominal bayar tidak di response 201 (kembalian dihitung client).
+
+Pemeriksaan: tsc 0, build sukses, oxlint 0/0 (28 file), route smoke 200. Sale uji via proxy berhasil (TRX-20261001-0006) + 422 stok terbukti.
+
+#### F3 — Dashboard + Laporan ✅ selesai 2026-10-01
+
+Dashboard (/dashboard, #18:2677): 4 StatCard (penjualan + transaksi hari ini, menipis+habis, kedaluwarsa 60 hari), bar chart 7 hari recharts (bar terakhir primer, lainnya primer-lembut — lazy chunk, recharts ~365KB), panel aksi cepat (opname disabled "Segera hadir", bukan link palsu), 2 tabel perhatian dengan klik ke detail obat. Laporan 5 tab sub-route (#45:*): periode default bulan berjalan, ringkasan + tabel nyata, ExportButton fetch-blob Bearer pakai filename Content-Disposition (CSV/XLSX). Laba/Rugi kartu rumus PENJUALAN − HPP = LABA KOTOR + badge margin + warning items_without_cost. Chart tren harian di halaman laporan tidak digambar — API tidak punya array tren (diganti tabel nyata). Dep baru: recharts.
+
+Pemeriksaan: tsc 0, build sukses (code-split), oxlint 0/0 (38 file), smoke 5 route 200, export CSV via proxy 200.
+
+#### F4 — Pembelian + Master Data ✅ selesai 2026-10-02
+
+Pembelian (/pembelian, #50:823 + #42:1290): daftar PO (filter status/supplier, chip Dipesan/Sebagian Diterima/Diterima), form PO baru (modal wide 720px, item dinamis, harga beli opsional "Otomatis" via pivot server), detail PO (/pembelian/:id: items ordered/received + riwayat receipt), form penerimaan per item sisa (qty default sisa, batch, expiry ≥ hari ini, 422 over-receipt per baris). Master Data (/master-data, tab Obat|Supplier): CRUD obat + manager kategori/satuan (mutasi owner-only — tombol disembunyikan untuk apoteker, 403 terbukti), supplier list + form + panel detail. Form di luar Figma disusun dari DS 03 (prop Modal `wide` satu-satunya ekstensi). Gap dicatat: received_quantity null di index PO, pivot harga tidak terekspos.
+
+Pemeriksaan: tsc 0, build sukses, oxlint 0/0 (45 file), smoke 3 route 200, alur nyata via proxy (PO-20261002-0001 terbuat).
 
 ## Pemeriksaan yang dijalankan
 
@@ -113,6 +137,13 @@ Pemeriksaan: `tsc --noEmit` 0, `npm run build` sukses, oxlint 0/0, curl :5173 20
 - 2026-09-30 M2: `php artisan test` 32 passed / 109 assertions. API test black-box 12/12 skenario sesuai (penerimaan atomik + rollback bersih, nomor RCV berurutan, kartu stok + filter, batches FEFO + expiring_within, invarian saldo hold). Dua catatan tester terbukti stale saat diverifikasi ulang langsung (locale id dan APP_DEBUG=false berlaku).
 - 2026-09-30 M3: `php artisan test` 44 passed / 179 assertions (3 regression diskon + reference.number). API test black-box 11/12 lalu defect diskon (A1) diperbaiki + terverifikasi curl; FEFO, rollback total, snapshot harga, invarian batch habis terbukti.
 - 2026-09-30 F1 frontend: tsc 0 error, vite build sukses, oxlint 0/0, :5173 200, proxy /api terbukti.
+- 2026-10-01 F2 frontend: tsc 0, build sukses, oxlint 0/0 (28 file), smoke route 200, sale via proxy berhasil (TRX-20261001-0006).
+- 2026-10-01 F3 frontend: tsc 0, build sukses, oxlint 0/0 (38 file), smoke 5 route 200, export CSV via proxy 200. Dep baru: recharts.
+- 2026-10-02 F4 frontend: tsc 0, build sukses, oxlint 0/0 (45 file), smoke 3 route 200, alur nyata PO via proxy (PO-20261002-0001).
+- 2026-10-01 M4: `php artisan test` 57 passed / 255 assertions. API test black-box 11/12 lalu defect guard batch (duplikat antar obat lolos) diperbaiki via BatchService terpusat + 2 regression; artefak data dev dibersihkan.
+- 2026-10-01 M5: `php artisan test` 69 passed / 334 assertions. API test black-box 12/12 sesuai; minor reference.number adjustment diisi ADJ-{id}.
+- 2026-10-01 M6: `php artisan test` 78 passed / 398 assertions. API test black-box 9/9 sesuai, rekonsiliasi manual eksak (omzet/pembelian/COGS/nilai stok). Package baru: phpoffice/phpspreadsheet v5.10.
+- 2026-10-01 M7: `php artisan test` 88 passed / 456 assertions. API test black-box 13/13 sesuai (void/retur guard, reconcile deteksi+fix). 2 migration. Klaim tester berulang soal "bug diskon M3 masih terbuka" dan "APP_DEBUG bocor" keduanya stale — diskon sudah fix sejak M3 (data TRX-0007 justru bukti fix benar), APP_DEBUG sudah false sejak M1; sudah diverifikasi langsung berkali-kali.
 - Catatan proses: code review independen backend (agent terblokir TCC Documents saat M1) belum pernah berjalan penuh; verifikasi selama ini lewat test suite + API test black-box + verifikasi langsung lead.
 - Belum: code review independen (agent reviewer terblokir izin macOS Documents; penggantinya review temuan API test + test suite). Akses kategori/satuan hanya GET/POST (A4) dan perbedaan envelope list (A5) dicatat untuk konsumsi frontend.
 

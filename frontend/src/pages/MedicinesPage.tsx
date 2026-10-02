@@ -1,49 +1,20 @@
 import { useQuery } from '@tanstack/react-query'
+import { Eye } from 'lucide-react'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Badge } from '../components/ui/Badge'
-import type { BadgeVariant } from '../components/ui/Badge'
 import { Pagination } from '../components/ui/Pagination'
 import { api } from '../lib/api'
 import { formatRupiah } from '../lib/format'
-
-interface Medicine {
-  id: number
-  code: string
-  name: string
-  category: { id: number; name: string } | null
-  unit: { id: number; name: string } | null
-  sale_price: string
-  min_stock: number
-  stock_total: string
-  is_active: boolean
-}
-
-interface MedicinesResponse {
-  data: Medicine[]
-  meta: {
-    current_page: number
-    last_page: number
-    total: number
-    from: number | null
-    to: number | null
-  }
-}
-
-/**
- * Status stok mengikuti batas minimum obat:
- * stok > min_stock → Aman, 0 < stok ≤ min_stock → Menipis, stok = 0 → Habis.
- */
-function stockStatus(stock: number, minStock: number): { label: string; variant: BadgeVariant } {
-  if (stock <= 0) return { label: 'Stok Habis', variant: 'danger' }
-  if (stock <= minStock) return { label: 'Menipis', variant: 'warning' }
-  return { label: 'Stok Aman', variant: 'success' }
-}
+import { stockStatus } from '../lib/medicine'
+import type { LaravelPaginated, Medicine } from '../lib/types'
 
 export function MedicinesPage() {
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['medicines', page],
-    queryFn: () => api<MedicinesResponse>(`/medicines?page=${page}`),
+    queryFn: () => api<LaravelPaginated<Medicine>>(`/medicines?page=${page}`),
   })
 
   return (
@@ -87,13 +58,14 @@ export function MedicinesPage() {
                 <th className="px-4 py-3 text-right">Stok Total</th>
                 <th className="px-4 py-3 text-right">Harga Jual</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3" aria-label="Aksi" />
               </tr>
             </thead>
             <tbody>
               {isPending &&
                 Array.from({ length: 5 }, (_, i) => (
                   <tr key={i} className="border-t border-line">
-                    {Array.from({ length: 7 }, (_, j) => (
+                    {Array.from({ length: 8 }, (_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-4 animate-pulse rounded bg-neutral-bg" />
                       </td>
@@ -103,7 +75,7 @@ export function MedicinesPage() {
 
               {data && data.data.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center text-sm text-ink-secondary">
+                  <td colSpan={8} className="px-6 py-16 text-center text-sm text-ink-secondary">
                     Belum ada data obat.
                   </td>
                 </tr>
@@ -113,7 +85,11 @@ export function MedicinesPage() {
                 const stock = Number(medicine.stock_total)
                 const status = stockStatus(stock, medicine.min_stock)
                 return (
-                  <tr key={medicine.id} className="border-t border-line">
+                  <tr
+                    key={medicine.id}
+                    onClick={() => navigate(`/persediaan/${medicine.id}`)}
+                    className="cursor-pointer border-t border-line transition-colors hover:bg-table-header"
+                  >
                     <td className="px-5 py-3 font-medium text-ink-secondary">{medicine.code}</td>
                     <td className="px-4 py-3 font-semibold text-ink">{medicine.name}</td>
                     <td className="px-4 py-3 text-ink-secondary">
@@ -128,6 +104,19 @@ export function MedicinesPage() {
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant={status.variant}>{status.label}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        aria-label={`Lihat detail ${medicine.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          navigate(`/persediaan/${medicine.id}`)
+                        }}
+                        className="text-ink-secondary transition-colors hover:text-primary"
+                      >
+                        <Eye size={16} />
+                      </button>
                     </td>
                   </tr>
                 )

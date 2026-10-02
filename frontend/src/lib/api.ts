@@ -14,11 +14,14 @@ export function setToken(token: string | null): void {
 
 export class ApiError extends Error {
   status: number
+  /** Payload `errors` Laravel (mis. daftar item stok tidak cukup saat 422). */
+  errors?: unknown
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, errors?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.errors = errors
   }
 }
 
@@ -50,9 +53,9 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
 
   const data: unknown = await response.json().catch(() => null)
   if (!response.ok) {
-    const message =
-      (data as { message?: string } | null)?.message ?? 'Terjadi kesalahan pada server.'
-    throw new ApiError(response.status, message)
+    const payload = data as { message?: string; errors?: unknown } | null
+    const message = payload?.message ?? 'Terjadi kesalahan pada server.'
+    throw new ApiError(response.status, message, payload?.errors)
   }
   return data as T
 }

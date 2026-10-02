@@ -3,13 +3,9 @@
 namespace App\Services;
 
 use App\Enums\MovementType;
-use App\Models\Batch;
 use App\Models\PurchaseReceipt;
-use App\Models\PurchaseReceiptItem;
 use App\Models\User;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Penerimaan barang manual (tanpa PO): satu transaction menghasilkan
@@ -20,6 +16,7 @@ class PurchaseReceiptService
     public function __construct(
         protected NumberGenerator $numbers,
         protected StockService $stock,
+        protected BatchService $batches,
     ) {
     }
 
@@ -38,7 +35,12 @@ class PurchaseReceiptService
             ]);
 
             foreach ($data['items'] as $item) {
-                $batch = $this->findOrCreateBatch($item);
+                // Guard identitas batch (termasuk bentrok antar obat) di BatchService.
+                $batch = $this->batches->findOrCreateForReceipt(
+                    $item['medicine_id'],
+                    $item['batch_number'],
+                    $item['expiry_date'],
+                );
 
                 $receiptItem = $receipt->items()->create([
                     'po_item_id' => null,
@@ -66,41 +68,5 @@ class PurchaseReceiptService
 
             return $receipt->load(['items.batch', 'items.medicine']);
         });
-    }
-
-    /**
-     * Batch adalah per (obat, nomor batch); tanggal kedaluwarsa tidak boleh
-     * berubah untuk nomor batch yang sama — itu indikasi salah ketik fatal.
-     *
-     * @param  array{medicine_id: int, batch_number: string, expiry_date: string}  $item
-     *
-     * @throws ValidationException jika batch ada tetapi tanggal kedaluwarsa berbeda.
-     */
-    protected function findOrCreateBatch(array $item): Batch
-    {
-        $batch = Batch::query()
-            ->where('medicine_id', $item['medicine_id'])
-            ->where('batch_number', $item['batch_number'])
-            ->first();
-
-        if ($batch !== null) {
-            $existing = $batch->expiry_date?->toDateString();
-            if ($existing !== $item['expiry_date']) {
-                throw ValidationException::withMessages([
-                    'items' => ["Batch {$item['batch_number']} sudah terdaftar dengan tanggal kedaluwarsa {$existing}."],
-                ]);
-            }
-
-            return $batch;
-        }
-
-        return Batch::create([
-            'medicine_id' => $item['medicine_id'],
-            'batch_number' => $item['batch_number'],
-            'expiry_date' => Carbon::createFromFormat('Y-m-d', $item['expiry_date'])->toDateString(),
-            'purchase_price' => $item['unit_cost'] ?? null,
-            'quantity_on_hand' => 0,
-            'received_at' => today(),
-        ]);
     }
 }

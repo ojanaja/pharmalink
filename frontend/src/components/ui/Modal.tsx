@@ -9,10 +9,12 @@ interface ModalProps {
   onClose: () => void
   children: ReactNode
   footer?: ReactNode
+  /** Form kompleks (PO, master data) butuh lebar lebih dari 460px bawaan DS. */
+  wide?: boolean
 }
 
 /** Modal — satu tujuan, satu keputusan (DS 05.2). Escape menutup bila aman. */
-export function Modal({ open, title, onClose, children, footer }: ModalProps) {
+export function Modal({ open, title, onClose, children, footer, wide = false }: ModalProps) {
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
@@ -35,7 +37,7 @@ export function Modal({ open, title, onClose, children, footer }: ModalProps) {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-[460px] max-w-full rounded-modal bg-surface p-6 shadow-high"
+        className={`${wide ? 'w-[720px]' : 'w-[460px]'} max-w-full rounded-modal bg-surface p-6 shadow-high`}
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <h2 className="text-lg font-bold text-ink">{title}</h2>

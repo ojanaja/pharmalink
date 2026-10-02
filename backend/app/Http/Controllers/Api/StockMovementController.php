@@ -93,10 +93,32 @@ class StockMovementController extends Controller
                 ->get()
                 ->mapWithKeys(fn (\App\Models\SaleItem $item) => [$item->id => $item->sale?->invoice_number]);
 
-        $movements->each(function (StockMovement $movement) use ($receiptNumbers, $saleNumbers) {
+        $opnameIds = $movements->where('reference_type', 'StockOpname')->pluck('reference_id');
+
+        $opnameNumbers = $opnameIds->isEmpty()
+            ? collect()
+            : \App\Models\StockOpname::query()
+                ->whereIn('id', $opnameIds)
+                ->get(['id', 'opname_number'])
+                ->mapWithKeys(fn (\App\Models\StockOpname $opname) => [$opname->id => $opname->opname_number]);
+
+        $returnItemIds = $movements->where('reference_type', 'SaleReturnItem')->pluck('reference_id');
+
+        $returnNumbers = $returnItemIds->isEmpty()
+            ? collect()
+            : \App\Models\SaleReturnItem::query()
+                ->whereIn('id', $returnItemIds)
+                ->with('saleReturn:id,return_number')
+                ->get()
+                ->mapWithKeys(fn (\App\Models\SaleReturnItem $item) => [$item->id => $item->saleReturn?->return_number]);
+
+        $movements->each(function (StockMovement $movement) use ($receiptNumbers, $saleNumbers, $opnameNumbers, $returnNumbers) {
             $movement->reference_number = match ($movement->reference_type) {
                 'PurchaseReceiptItem' => $receiptNumbers->get($movement->reference_id),
                 'SaleItem' => $saleNumbers->get($movement->reference_id),
+                'StockOpname' => $opnameNumbers->get($movement->reference_id),
+                'SaleReturnItem' => $returnNumbers->get($movement->reference_id),
+                'StockAdjustment' => "ADJ-{$movement->reference_id}",
                 default => null,
             };
         });

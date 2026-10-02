@@ -19,6 +19,7 @@ class Sale extends Model
         'payment_method',
         'status',
         'cancelled_at',
+        'cancelled_reason',
         'cancelled_by',
     ];
 
@@ -42,6 +43,11 @@ class Sale extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function saleReturns(): HasMany
+    {
+        return $this->hasMany(SaleReturn::class);
     }
 
     public function cancelledBy(): BelongsTo

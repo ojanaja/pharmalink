@@ -48,6 +48,8 @@ class SaleService
             }
 
             $sale = Sale::create([
+                // Invariant uang: semua nilai disimpan presisi DECIMAL(15,2);
+                // tidak ada pembulatan ke Rp100 — tidak ada kebutuhan kas ketat (M7).
                 'invoice_number' => $this->numbers->generate('TRX', 'sales', 'invoice_number'),
                 'sold_at' => now(),
                 'user_id' => $user->id,

@@ -23,6 +23,9 @@ class SaleItemResource extends JsonResource
                 'id' => $this->batch->id,
                 'batch_number' => $this->batch->batch_number,
             ]),
+            // Diisi controller@show: agregat retur untuk batas retur sisa.
+            'returned_quantity' => $this->when(isset($this->returned_quantity), $this->returned_quantity),
+            'returnable_quantity' => $this->when(isset($this->returnable_quantity), $this->returnable_quantity),
         ];
     }
 }

@@ -22,9 +22,10 @@ class PharmacySetting extends Model
 
     /**
      * Ambil baris pengaturan (singleton). Buat default jika belum ada.
+     * refresh() memuat nilai default kolom lain dari DB setelah create.
      */
     public static function current(): self
     {
-        return static::query()->firstOrCreate([], ['name' => 'Apotek Pharmalink']);
+        return static::query()->firstOrCreate([], ['name' => 'Apotek Pharmalink'])->refresh();
     }
 }

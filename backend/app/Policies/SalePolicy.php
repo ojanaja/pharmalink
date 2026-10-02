@@ -2,12 +2,13 @@
 
 namespace App\Policies;
 
+use App\Enums\Role;
 use App\Models\Sale;
 use App\Models\User;
 
 /**
- * Kasir adalah tugas operasional: owner dan apoteker boleh menjual serta
- * melihat riwayat. Pembatalan (void) dibatasi owner di M7.
+ * Kasir tugas operasional: owner & apoteker boleh menjual/lihat. Void
+ * (pembatalan penuh) hanya owner; retur parsial boleh kedua role.
  */
 class SalePolicy
 {
@@ -24,5 +25,10 @@ class SalePolicy
     public function create(User $user): bool
     {
         return true;
+    }
+
+    public function void(User $user, Sale $sale): bool
+    {
+        return $user->role === Role::Owner;
     }
 }

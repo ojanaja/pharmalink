@@ -106,11 +106,38 @@ class PurchaseReceiptTest extends TestCase
 
         $response = $this->withToken($token)->postJson('/api/receipts', $this->payload($medicine, 'BTH-X-001', '2027-02-02'));
         $response->assertUnprocessable();
-        $this->assertStringContainsString('kedaluwarsa', json_encode($response->json('errors'), JSON_THROW_ON_ERROR));
+        $this->assertStringContainsString('kedaluwarsa', (string) $response->json('message'));
 
         // Tidak ada sisa mutasi dari percobaan yang gagal.
         $this->assertSame(1, StockMovement::where('medicine_id', $medicine->id)->count());
         $this->assertSame(20, Batch::where('medicine_id', $medicine->id)->sole()->quantity_on_hand);
+    }
+
+    public function test_batch_number_dipakai_obat_lain_ditolak(): void
+    {
+        // Regression A4-M4: nomor batch adalah identitas fisik; tidak boleh
+        // dipakai dua obat berbeda (bahkan dengan expiry sama).
+        $medicine2 = Medicine::create([
+            'code' => 'MED-002',
+            'name' => 'Amoxicillin 500mg',
+            'category_id' => Category::create(['name' => 'Obat Keras'])->id,
+            'unit_id' => Unit::create(['name' => 'Kapsul'])->id,
+            'sale_price' => '12000.00',
+        ]);
+        $owner = User::factory()->create(['role' => Role::Owner]);
+
+        $this->withToken($owner->createToken('api')->plainTextToken)
+            ->postJson('/api/receipts', $this->payload($this->makeMedicine(), 'BTH-SHARED-001', '2027-01-01'))
+            ->assertCreated();
+
+        $response = $this->withToken($owner->createToken('api')->plainTextToken)
+            ->postJson('/api/receipts', $this->payload($medicine2, 'BTH-SHARED-001', '2027-12-31'));
+        $response->assertUnprocessable();
+        $this->assertStringContainsString('obat lain', (string) $response->json('message'));
+
+        // Rollback total: batch obat 2 tidak tercipta, movement tetap satu.
+        $this->assertSame(1, Batch::count());
+        $this->assertSame(1, StockMovement::count());
     }
 
     public function test_expiry_tanggal_lampau_ditolak(): void

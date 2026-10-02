@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SaleIndexRequest;
 use App\Http\Requests\StoreSaleRequest;
+use App\Http\Requests\VoidSaleRequest;
 use App\Http\Resources\SaleResource;
 use App\Models\Sale;
 use App\Services\SaleService;
@@ -62,10 +63,38 @@ class SaleController extends Controller
 
     public function show(Sale $sale): SaleResource
     {
-        return new SaleResource($sale->load([
+        $sale->load([
             'user:id,name',
+            'cancelledBy:id,name',
             'items.medicine:id,code,name',
             'items.batch:id,batch_number',
-        ]));
+            'saleReturns.user:id,name',
+            'saleReturns.items.saleItem.medicine:id,code,name',
+            'saleReturns.items.saleItem.batch:id,batch_number',
+        ]);
+
+        // Agregat retur per item untuk batas retur sisa di UI.
+        $returned = \App\Models\SaleReturnItem::query()
+            ->whereIn('sale_item_id', $sale->items->pluck('id'))
+            ->selectRaw('sale_item_id, SUM(quantity) as qty')
+            ->groupBy('sale_item_id')
+            ->pluck('qty', 'sale_item_id');
+
+        foreach ($sale->items as $item) {
+            $item->returned_quantity = (int) ($returned[$item->id] ?? 0);
+            $item->returnable_quantity = $item->quantity - $item->returned_quantity;
+        }
+
+        return new SaleResource($sale);
+    }
+
+    /**
+     * Void penjualan (kompensasi penuh ke batch asal); hanya owner, via policy.
+     */
+    public function void(VoidSaleRequest $request, Sale $sale, \App\Services\SaleVoidService $voids): SaleResource
+    {
+        $sale = $voids->void($sale, $request->string('reason')->toString(), $request->user());
+
+        return new SaleResource($sale);
     }
 }

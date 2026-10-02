@@ -24,6 +24,17 @@ class SaleResource extends JsonResource
             ]),
             'items_count' => $this->whenCounted('items'),
             'items' => SaleItemResource::collection($this->whenLoaded('items')),
+            // Jejak pembatalan selalu ada di respons (null bila tidak cancelled);
+            // nama field sama persis dengan kolom DB: cancelled_*.
+            'cancelled_reason' => $this->cancelled_reason,
+            'cancelled_at' => $this->cancelled_at?->toIso8601String(),
+            'cancelled_by' => $this->cancelled_by === null
+                ? null
+                : $this->whenLoaded('cancelledBy', fn () => [
+                    'id' => $this->cancelledBy->id,
+                    'name' => $this->cancelledBy->name,
+                ], ['id' => $this->cancelled_by]),
+            'returns' => SaleReturnResource::collection($this->whenLoaded('saleReturns')),
         ];
     }
 }
