@@ -22,7 +22,7 @@ Kimi Code mengenali custom agents project dari `.agents/agents/`. Dari root repo
 kimi --agent pharmalink-lead
 ```
 
-Lalu kirim isi `docs/KIMI_FIRST_PROMPT.md` sebagai prompt pertama.
+atau lewat `./scripts/start-kimi.sh`. Setelah sesi terbuka, arahkan agent lewat `AGENTS.md` root dan `docs/IMPLEMENTATION_PLAN.md` untuk melanjutkan pekerjaan.
 
 ## Asal, format, dan lisensi
 

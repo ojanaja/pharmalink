@@ -39,4 +39,4 @@ Catatan keamanan lokal: `POST /api/auth/login` dibatasi 5 percobaan per menit (t
 - [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) — milestone, keputusan, asumsi, dan pemeriksaan yang dijalankan.
 - [docs/DOCUMENTATION_STANDARD.md](docs/DOCUMENTATION_STANDARD.md) — standar dokumentasi kode.
 
-Untuk development dengan Kimi Code: `./scripts/start-kimi.sh`, prompt awal di [docs/KIMI_FIRST_PROMPT.md](docs/KIMI_FIRST_PROMPT.md), profil spesialis di `.agents/agents/`.
+Untuk development dengan Kimi Code: `./scripts/start-kimi.sh` (membuka sesi dengan agent `pharmalink-lead`); profil spesialis ada di `.agents/agents/` dan dijelaskan di [docs/AGENCY_AGENTS.md](docs/AGENCY_AGENTS.md).
