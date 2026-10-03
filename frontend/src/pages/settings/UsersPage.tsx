@@ -6,7 +6,9 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Field, Input, Select } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
+import { SortHeader } from '../../components/ui/SortHeader'
 import { ApiError, api } from '../../lib/api'
+import { sortRows, useSort } from '../../lib/sort'
 import type { AppUser } from '../../lib/types'
 
 const ROLE_OPTIONS = [
@@ -22,11 +24,39 @@ export function UsersPage() {
   const [resetTarget, setResetTarget] = useState<AppUser | null>(null)
   const [toggleTarget, setToggleTarget] = useState<AppUser | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [roleFilter, setRoleFilter] = useState<'all' | 'owner' | 'apoteker'>('all')
+  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const { sort, toggleSort } = useSort()
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['users'],
     queryFn: () => api<{ data: AppUser[] }>('/users'),
   })
+
+  // Sort & filter client-side — daftar user relatif kecil.
+  const visible = sortRows(
+    (data?.data ?? []).filter(
+      (user) =>
+        (roleFilter === 'all' || user.role === roleFilter) &&
+        (activeFilter === 'all' ||
+          (activeFilter === 'active' ? user.is_active : !user.is_active)),
+    ),
+    sort,
+    (user, key) => {
+      switch (key) {
+        case 'name':
+          return user.name
+        case 'email':
+          return user.email
+        case 'role':
+          return user.role
+        case 'status':
+          return user.is_active ? 1 : 0
+        default:
+          return null
+      }
+    },
+  )
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ['users'] })
@@ -35,9 +65,33 @@ export function UsersPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-ink-secondary">
-          {data?.data.length ?? 0} akun staf · role menentukan akses menu dan tindakan di aplikasi.
-        </p>
+        <div className="flex items-end gap-3">
+          <p className="pb-2 text-sm text-ink-secondary">
+            {data?.data.length ?? 0} akun staf · role menentukan akses menu dan tindakan.
+          </p>
+          <div className="w-40">
+            <Select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value as typeof roleFilter)}
+              aria-label="Filter role"
+            >
+              <option value="all">Semua role</option>
+              <option value="owner">Owner</option>
+              <option value="apoteker">Apoteker</option>
+            </Select>
+          </div>
+          <div className="w-40">
+            <Select
+              value={activeFilter}
+              onChange={(e) => setActiveFilter(e.target.value as typeof activeFilter)}
+              aria-label="Filter status"
+            >
+              <option value="all">Semua status</option>
+              <option value="active">Aktif</option>
+              <option value="inactive">Nonaktif</option>
+            </Select>
+          </div>
+        </div>
         <Button
           size="sm"
           icon={<Plus size={14} />}
@@ -72,10 +126,10 @@ export function UsersPage() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-                <th className="px-5 py-3">Nama</th>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Status</th>
+                <SortHeader label="Nama" sortKey="name" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="Email" sortKey="email" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="Role" sortKey="role" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="Status" sortKey="status" sort={sort} onToggle={toggleSort} />
                 <th className="px-4 py-3" aria-label="Aksi" />
               </tr>
             </thead>
@@ -91,7 +145,7 @@ export function UsersPage() {
                   </tr>
                 ))}
 
-              {data?.data.map((user) => (
+              {visible.map((user) => (
                 <tr key={user.id} className="border-t border-line">
                   <td className="px-5 py-3 font-semibold text-ink">
                     {user.name}

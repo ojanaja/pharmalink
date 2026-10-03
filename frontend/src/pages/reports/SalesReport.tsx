@@ -8,6 +8,7 @@ import { formatDateTimeId, formatRupiah } from '../../lib/format'
 import type { SalesReport } from '../../lib/types'
 import { ExportButton } from './ExportButton'
 import { currentMonthPeriod } from '../../lib/format'
+import { sortRows, useSort } from '../../lib/sort'
 import { PeriodFilter } from './PeriodFilter'
 import { ReportError, ReportTable } from './shared'
 
@@ -16,6 +17,8 @@ export function SalesReport() {
   const [from, setFrom] = useState(initial.from)
   const [to, setTo] = useState(initial.to)
   const [page, setPage] = useState(1)
+  const { sort: medSort, toggleSort: toggleMedSort } = useSort()
+  const { sort: trxSort, toggleSort: toggleTrxSort } = useSort()
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['report-sales', from, to, page],
@@ -72,7 +75,21 @@ export function SalesReport() {
             isEmpty={!data || data.data.medicines.length === 0}
             emptyText="Tidak ada penjualan pada periode ini."
             head={['Obat', 'Kuantitas', 'Omzet']}
-            rows={(data?.data.medicines ?? []).map((medicine) => [
+            sortable={{ Obat: 'nama', Kuantitas: 'qty', Omzet: 'omzet' }}
+            sort={medSort}
+            onSortToggle={toggleMedSort}
+            rows={sortRows(data?.data.medicines ?? [], medSort, (medicine, key) => {
+              switch (key) {
+                case 'nama':
+                  return medicine.name
+                case 'qty':
+                  return medicine.quantity
+                case 'omzet':
+                  return Number(medicine.omzet)
+                default:
+                  return null
+              }
+            }).map((medicine) => [
               <div key="n">
                 <p className="text-[13px] font-semibold text-ink">{medicine.name}</p>
                 <p className="text-[11px] text-ink-secondary">{medicine.code}</p>
@@ -91,7 +108,19 @@ export function SalesReport() {
             isEmpty={!data || data.data.transactions.data.length === 0}
             emptyText="Tidak ada transaksi pada periode ini."
             head={['Tanggal', 'No. Transaksi', 'Kasir', 'Item', 'Total']}
-            rows={(data?.data.transactions.data ?? []).map((sale) => [
+            sortable={{ Tanggal: 'tanggal', Total: 'total' }}
+            sort={trxSort}
+            onSortToggle={toggleTrxSort}
+            rows={sortRows(data?.data.transactions.data ?? [], trxSort, (sale, key) => {
+              switch (key) {
+                case 'tanggal':
+                  return sale.sold_at
+                case 'total':
+                  return Number(sale.total)
+                default:
+                  return null
+              }
+            }).map((sale) => [
               <span key="t">{formatDateTimeId(sale.sold_at)}</span>,
               <span key="i" className="font-semibold">
                 {sale.invoice_number}

@@ -6,9 +6,11 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Select } from '../../components/ui/Field'
 import { Pagination } from '../../components/ui/Pagination'
+import { SortHeader } from '../../components/ui/SortHeader'
 import { api } from '../../lib/api'
 import { formatDateId, formatRupiah } from '../../lib/format'
 import { poStatusLabel } from '../../lib/medicine'
+import { sortRows, useSort } from '../../lib/sort'
 import type { LaravelPaginated, PurchaseOrderListItem, Supplier } from '../../lib/types'
 import { ManualReceiptModal } from './ManualReceiptModal'
 import { PurchaseOrderFormModal } from './PurchaseOrderFormModal'
@@ -28,6 +30,7 @@ export function PurchasesPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [manualReceiptOpen, setManualReceiptOpen] = useState(false)
   const queryClient = useQueryClient()
+  const { sort, toggleSort } = useSort()
 
   const { data: suppliers } = useQuery({
     queryKey: ['suppliers'],
@@ -43,6 +46,24 @@ export function PurchasesPage() {
       return api<LaravelPaginated<PurchaseOrderListItem>>(`/purchase-orders?${params}`)
     },
     placeholderData: keepPreviousData,
+  })
+
+  // Filter status/supplier via API; sort hasil halaman client-side.
+  const visible = sortRows(data?.data ?? [], sort, (po, key) => {
+    switch (key) {
+      case 'nomor':
+        return po.po_number
+      case 'supplier':
+        return po.supplier?.name ?? null
+      case 'tanggal':
+        return po.ordered_at
+      case 'status':
+        return po.status
+      case 'total':
+        return Number(po.total)
+      default:
+        return null
+    }
   })
 
   return (
@@ -144,12 +165,12 @@ export function PurchasesPage() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-                <th className="px-5 py-3">Nomor</th>
-                <th className="px-4 py-3">Tanggal</th>
-                <th className="px-4 py-3">Supplier</th>
+                <SortHeader label="Nomor" sortKey="nomor" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="Tanggal" sortKey="tanggal" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="Supplier" sortKey="supplier" sort={sort} onToggle={toggleSort} />
                 <th className="px-4 py-3 text-right">Item</th>
-                <th className="px-4 py-3 text-right">Total</th>
-                <th className="px-4 py-3">Status</th>
+                <SortHeader label="Total" sortKey="total" sort={sort} onToggle={toggleSort} align="right" />
+                <SortHeader label="Status" sortKey="status" sort={sort} onToggle={toggleSort} />
               </tr>
             </thead>
             <tbody>
@@ -172,7 +193,7 @@ export function PurchasesPage() {
                 </tr>
               )}
 
-              {data?.data.map((po) => {
+              {visible.map((po) => {
                 const statusInfo = poStatusLabel(po.status)
                 return (
                   <tr

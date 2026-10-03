@@ -5,6 +5,7 @@ import { Badge } from '../../components/ui/Badge'
 import { StatCard } from '../../components/ui/StatCard'
 import { api } from '../../lib/api'
 import { formatDateId, formatRupiah } from '../../lib/format'
+import { sortRows, useSort } from '../../lib/sort'
 import type { ExpiryReport } from '../../lib/types'
 import { ExportButton } from './ExportButton'
 import { ReportError, ReportTable } from './shared'
@@ -13,6 +14,7 @@ const DAY_OPTIONS = [30, 60, 90] as const
 
 export function ExpiryReport() {
   const [days, setDays] = useState<number>(60)
+  const { sort, toggleSort } = useSort()
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['report-expiry', days],
@@ -97,10 +99,30 @@ export function ExpiryReport() {
             }
             emptyText="Tidak ada batch kedaluwarsa atau mendekati kedaluwarsa."
             head={['Obat', 'Batch', 'Tanggal Expired', 'Qty', 'Nilai', 'Status']}
-            rows={[
-              ...(data?.data.expired ?? []).map((item) => toRow(item, 'danger')),
-              ...(data?.data.expiring ?? []).map((item) => toRow(item, 'warning')),
-            ]}
+            sortable={{ Obat: 'obat', 'Tanggal Expired': 'expiry', Qty: 'qty', Nilai: 'nilai' }}
+            sort={sort}
+            onSortToggle={toggleSort}
+            rows={sortRows(
+              [
+                ...(data?.data.expired ?? []).map((item) => ({ ...item, variant: 'danger' as const })),
+                ...(data?.data.expiring ?? []).map((item) => ({ ...item, variant: 'warning' as const })),
+              ],
+              sort,
+              (item, key) => {
+                switch (key) {
+                  case 'obat':
+                    return item.medicine.name
+                  case 'expiry':
+                    return item.expiry_date
+                  case 'qty':
+                    return item.quantity_on_hand
+                  case 'nilai':
+                    return Number(item.stock_value)
+                  default:
+                    return null
+                }
+              },
+            ).map((item) => toRow(item, item.variant))}
           />
         </>
       )}

@@ -7,8 +7,10 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
 import { Pagination } from '../../components/ui/Pagination'
+import { SortHeader } from '../../components/ui/SortHeader'
 import { ApiError, api } from '../../lib/api'
 import { formatRupiah } from '../../lib/format'
+import { sortRows, useSort } from '../../lib/sort'
 import type { Category, LaravelPaginated, Medicine, Supplier, Unit } from '../../lib/types'
 import { MedicineFormModal } from './MedicineFormModal'
 import { SupplierFormModal } from './SupplierFormModal'
@@ -69,6 +71,7 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
   const [deleting, setDeleting] = useState<Medicine | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deletingSubmit, setDeletingSubmit] = useState(false)
+  const { sort, toggleSort } = useSort()
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['medicines', page],
@@ -128,12 +131,12 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-                <th className="px-5 py-3">Kode</th>
-                <th className="px-4 py-3">Nama Obat</th>
+                <SortHeader label="Kode" sortKey="code" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="Nama Obat" sortKey="name" sort={sort} onToggle={toggleSort} />
                 <th className="px-4 py-3">Kategori</th>
                 <th className="px-4 py-3">Satuan</th>
-                <th className="px-4 py-3 text-right">Harga Jual</th>
-                <th className="px-4 py-3 text-right">Min. Stok</th>
+                <SortHeader label="Harga Jual" sortKey="price" sort={sort} onToggle={toggleSort} align="right" />
+                <SortHeader label="Min. Stok" sortKey="min" sort={sort} onToggle={toggleSort} align="right" />
                 <th className="px-4 py-3">Status</th>
                 {isOwner && <th className="px-4 py-3" aria-label="Aksi" />}
               </tr>
@@ -150,7 +153,20 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
                   </tr>
                 ))}
 
-              {data?.data.map((medicine) => {
+              {sortRows(data?.data ?? [], sort, (medicine, key) => {
+                switch (key) {
+                  case 'code':
+                    return medicine.code
+                  case 'name':
+                    return medicine.name
+                  case 'price':
+                    return Number(medicine.sale_price)
+                  case 'min':
+                    return medicine.min_stock
+                  default:
+                    return null
+                }
+              }).map((medicine) => {
                 return (
                   <tr key={medicine.id} className="border-t border-line">
                     <td className="px-5 py-3 font-medium text-ink-secondary">{medicine.code}</td>
@@ -340,6 +356,7 @@ function SuppliersTab({ isOwner }: { isOwner: boolean }) {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Supplier | null>(null)
+  const { sort, toggleSort } = useSort()
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['suppliers'],
@@ -347,6 +364,16 @@ function SuppliersTab({ isOwner }: { isOwner: boolean }) {
   })
 
   const selected = data?.data.find((supplier) => supplier.id === selectedId) ?? null
+  const visibleSuppliers = sortRows(data?.data ?? [], sort, (supplier, key) => {
+    switch (key) {
+      case 'name':
+        return supplier.name
+      case 'kontak':
+        return supplier.contact_person
+      default:
+        return null
+    }
+  })
 
   return (
     <div className="flex items-start gap-6">
@@ -382,8 +409,8 @@ function SuppliersTab({ isOwner }: { isOwner: boolean }) {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-                <th className="px-5 py-3">Nama</th>
-                <th className="px-4 py-3">Kontak</th>
+                <SortHeader label="Nama" sortKey="name" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="Kontak" sortKey="kontak" sort={sort} onToggle={toggleSort} />
                 <th className="px-4 py-3">Telepon</th>
               </tr>
             </thead>
@@ -399,7 +426,7 @@ function SuppliersTab({ isOwner }: { isOwner: boolean }) {
                   </tr>
                 ))}
 
-              {data && data.data.length === 0 && (
+              {data && visibleSuppliers.length === 0 && (
                 <tr>
                   <td colSpan={3} className="px-6 py-16 text-center text-sm text-ink-secondary">
                     Belum ada supplier terdaftar.
@@ -407,7 +434,7 @@ function SuppliersTab({ isOwner }: { isOwner: boolean }) {
                 </tr>
               )}
 
-              {data?.data.map((supplier) => (
+              {visibleSuppliers.map((supplier) => (
                 <tr
                   key={supplier.id}
                   onClick={() => setSelectedId(supplier.id)}

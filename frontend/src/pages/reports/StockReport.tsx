@@ -5,11 +5,13 @@ import { StatCard } from '../../components/ui/StatCard'
 import { api } from '../../lib/api'
 import { formatRupiah } from '../../lib/format'
 import { apiStockStatus } from '../../lib/medicine'
+import { sortRows, useSort } from '../../lib/sort'
 import type { StockReport } from '../../lib/types'
 import { ExportButton } from './ExportButton'
 import { ReportError, ReportTable } from './shared'
 
 export function StockReport() {
+  const { sort, toggleSort } = useSort()
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['report-stock'],
     queryFn: () => api<{ data: StockReport }>('/reports/stock'),
@@ -75,7 +77,21 @@ export function StockReport() {
             isEmpty={!data || data.data.medicines.length === 0}
             emptyText="Belum ada data persediaan."
             head={['Obat', 'Kategori', 'Stok', 'Min.', 'Nilai', 'Status']}
-            rows={(data?.data.medicines ?? []).map((medicine) => {
+            sortable={{ Obat: 'nama', Stok: 'stok', Nilai: 'nilai' }}
+            sort={sort}
+            onSortToggle={toggleSort}
+            rows={sortRows(data?.data.medicines ?? [], sort, (medicine, key) => {
+              switch (key) {
+                case 'nama':
+                  return medicine.name
+                case 'stok':
+                  return medicine.stock_total
+                case 'nilai':
+                  return Number(medicine.stock_value)
+                default:
+                  return null
+              }
+            }).map((medicine) => {
               const status = apiStockStatus(medicine.status)
               return [
                 <div key="n">

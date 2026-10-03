@@ -1,3 +1,6 @@
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
+import type { SortState } from '../../lib/sort'
+
 export function ReportError({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="flex flex-col items-center gap-3 rounded-card border border-line bg-surface px-6 py-16 text-center">
@@ -22,6 +25,10 @@ interface ReportTableProps {
   isEmpty: boolean
   emptyText: string
   footer?: React.ReactNode
+  /** Map label kolom → sortKey untuk header yang bisa di-sort (opsional). */
+  sortable?: Record<string, string>
+  sort?: SortState
+  onSortToggle?: (key: string) => void
 }
 
 /** Pola tabel laporan — konsisten dengan tabel aplikasi lain (header 10px uppercase). */
@@ -34,6 +41,9 @@ export function ReportTable({
   isEmpty,
   emptyText,
   footer,
+  sortable,
+  sort,
+  onSortToggle,
 }: ReportTableProps) {
   return (
     <div className="overflow-hidden rounded-card border border-line bg-surface">
@@ -44,11 +54,35 @@ export function ReportTable({
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-            {head.map((column) => (
-              <th key={column} className="px-5 py-3">
-                {column}
-              </th>
-            ))}
+            {head.map((column) => {
+              const sortKey = sortable?.[column]
+              if (!sortKey || !sort || !onSortToggle) {
+                return (
+                  <th key={column} className="px-5 py-3">
+                    {column}
+                  </th>
+                )
+              }
+              const active = sort.key === sortKey
+              const Icon = active
+                ? sort.direction === 'asc'
+                  ? ArrowUp
+                  : ArrowDown
+                : ArrowUpDown
+              return (
+                <th
+                  key={column}
+                  onClick={() => onSortToggle(sortKey)}
+                  aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  className="cursor-pointer select-none px-5 py-3 transition-colors hover:text-ink"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {column}
+                    <Icon size={11} className={active ? 'text-primary' : 'text-placeholder'} aria-hidden="true" />
+                  </span>
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody>

@@ -7,9 +7,11 @@ import { Button } from '../../components/ui/Button'
 import { Field, Input } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
 import { Pagination } from '../../components/ui/Pagination'
+import { SortHeader } from '../../components/ui/SortHeader'
 import { ApiError, api } from '../../lib/api'
 import { formatDateTimeId, formatRupiah, todayLocal } from '../../lib/format'
 import { saleStatusLabel } from '../../lib/medicine'
+import { sortRows, useSort } from '../../lib/sort'
 import type { LaravelPaginated, SaleDetail, SaleTransaction } from '../../lib/types'
 
 // Filter default riwayat = hari ini (Y-m-d, waktu lokal), dihitung sekali saat modul dimuat.
@@ -24,9 +26,8 @@ export function SalesHistoryPage() {
   const [from, setFrom] = useState(TODAY)
   const [to, setTo] = useState(TODAY)
   const [page, setPage] = useState(1)
-  const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [returnItem, setReturnItem] = useState<{ saleId: number; itemId: number; name: string } | null>(null)
-  const [voidTarget, setVoidTarget] = useState<{ saleId: number; number: string } | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'cancelled'>('all')
+  const { sort, toggleSort } = useSort()
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['sales-history', from, to, page],
@@ -34,6 +35,27 @@ export function SalesHistoryPage() {
       api<LaravelPaginated<SaleTransaction>>(`/sales?from=${from}&to=${to}&page=${page}`),
     placeholderData: keepPreviousData,
   })
+
+  // Sort & filter client-side di halaman yang sedang tampil.
+  const visible = sortRows(
+    (data?.data ?? []).filter((sale) => statusFilter === 'all' || sale.status === statusFilter),
+    sort,
+    (sale, key) => {
+      switch (key) {
+        case 'tanggal':
+          return sale.sold_at
+        case 'nomor':
+          return sale.invoice_number
+        case 'total':
+          return Number(sale.total)
+        default:
+          return null
+      }
+    },
+  )
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [returnItem, setReturnItem] = useState<{ saleId: number; itemId: number; name: string } | null>(null)
+  const [voidTarget, setVoidTarget] = useState<{ saleId: number; number: string } | null>(null)
 
   return (
     <div className="flex flex-col gap-4">
@@ -53,6 +75,29 @@ export function SalesHistoryPage() {
         <span className="pb-2.5 text-xs text-ink-secondary">
           {data?.meta.total ?? 0} transaksi pada periode ini.
         </span>
+        <div className="ml-auto flex gap-2 pb-1">
+          {(
+            [
+              { key: 'all', label: 'Semua' },
+              { key: 'completed', label: 'Selesai' },
+              { key: 'cancelled', label: 'Dibatalkan' },
+            ] as const
+          ).map((filter) => (
+            <button
+              key={filter.key}
+              type="button"
+              onClick={() => setStatusFilter(filter.key)}
+              aria-pressed={statusFilter === filter.key}
+              className={`rounded-full border px-3.5 py-1.5 text-[13px] font-bold transition-colors ${
+                statusFilter === filter.key
+                  ? 'border-primary bg-primary text-white'
+                  : 'border-line bg-surface text-ink-secondary hover:border-primary hover:text-primary'
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-card border border-line bg-surface shadow-low">
@@ -67,11 +112,11 @@ export function SalesHistoryPage() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-                <th className="px-5 py-3">No. Transaksi</th>
-                <th className="px-4 py-3">Waktu</th>
+                <SortHeader label="No. Transaksi" sortKey="nomor" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="Waktu" sortKey="tanggal" sort={sort} onToggle={toggleSort} />
                 <th className="px-4 py-3">Kasir</th>
                 <th className="px-4 py-3 text-right">Item</th>
-                <th className="px-4 py-3 text-right">Total</th>
+                <SortHeader label="Total" sortKey="total" sort={sort} onToggle={toggleSort} align="right" />
                 <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
@@ -87,15 +132,15 @@ export function SalesHistoryPage() {
                   </tr>
                 ))}
 
-              {data && data.data.length === 0 && (
+              {data && visible.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-6 py-16 text-center text-sm text-ink-secondary">
-                    Tidak ada transaksi pada periode ini.
+                    Tidak ada transaksi yang cocok dengan filter.
                   </td>
                 </tr>
               )}
 
-              {data?.data.map((sale) => {
+              {visible.map((sale) => {
                 const status = saleStatusLabel(sale.status)
                 return (
                   <tr

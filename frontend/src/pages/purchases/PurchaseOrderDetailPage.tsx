@@ -4,9 +4,11 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
+import { SortHeader } from '../../components/ui/SortHeader'
 import { api } from '../../lib/api'
 import { formatDateId, formatDateTimeId, formatRupiah } from '../../lib/format'
 import { poStatusLabel } from '../../lib/medicine'
+import { sortRows, useSort } from '../../lib/sort'
 import type { PurchaseOrderDetail, PurchaseReceiptItem } from '../../lib/types'
 import { PurchaseReturnModal } from './PurchaseReturnModal'
 import { ReceiptFormModal } from './ReceiptFormModal'
@@ -16,6 +18,7 @@ export function PurchaseOrderDetailPage() {
   const [receiptOpen, setReceiptOpen] = useState(false)
   const [returnTarget, setReturnTarget] = useState<PurchaseReceiptItem | null>(null)
   const [returnSaved, setReturnSaved] = useState<string | null>(null)
+  const { sort, toggleSort } = useSort()
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['purchase-order', id],
@@ -50,6 +53,22 @@ export function PurchaseOrderDetailPage() {
   const po = data.data
   const status = poStatusLabel(po.status)
   const canReceive = po.status !== 'received'
+  const visibleItems = sortRows(po.items, sort, (item, key) => {
+    switch (key) {
+      case 'obat':
+        return item.medicine?.name ?? null
+      case 'dipesan':
+        return item.quantity
+      case 'diterima':
+        return item.received_quantity ?? 0
+      case 'harga':
+        return Number(item.unit_price)
+      case 'subtotal':
+        return Number(item.subtotal)
+      default:
+        return null
+    }
+  })
 
   return (
     <div className="flex flex-col gap-6">
@@ -89,15 +108,15 @@ export function PurchaseOrderDetailPage() {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-              <th className="px-5 py-3">Obat</th>
-              <th className="px-4 py-3 text-right">Dipesan</th>
-              <th className="px-4 py-3 text-right">Diterima</th>
-              <th className="px-4 py-3 text-right">Harga</th>
-              <th className="px-4 py-3 text-right">Subtotal</th>
+              <SortHeader label="Obat" sortKey="obat" sort={sort} onToggle={toggleSort} />
+              <SortHeader label="Dipesan" sortKey="dipesan" sort={sort} onToggle={toggleSort} align="right" />
+              <SortHeader label="Diterima" sortKey="diterima" sort={sort} onToggle={toggleSort} align="right" />
+              <SortHeader label="Harga" sortKey="harga" sort={sort} onToggle={toggleSort} align="right" />
+              <SortHeader label="Subtotal" sortKey="subtotal" sort={sort} onToggle={toggleSort} align="right" />
             </tr>
           </thead>
           <tbody>
-            {po.items.map((item) => {
+            {visibleItems.map((item) => {
               const received = item.received_quantity ?? 0
               return (
                 <tr key={item.id} className="border-t border-line">

@@ -6,8 +6,10 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
 import { Pagination } from '../../components/ui/Pagination'
+import { SortHeader } from '../../components/ui/SortHeader'
 import { ApiError, api } from '../../lib/api'
 import { opnameStatusLabel } from '../../lib/medicine'
+import { sortRows, useSort } from '../../lib/sort'
 import type { LaravelPaginated, OpnameItem, StockOpname } from '../../lib/types'
 
 type WizardStep = 'hitung' | 'konfirmasi'
@@ -25,6 +27,8 @@ export function StockOpnamePage() {
   const [touched, setTouched] = useState<Set<number>>(new Set())
   const [page, setPage] = useState(1)
   const [detailId, setDetailId] = useState<number | null>(null)
+  const { sort: historySort, toggleSort: toggleHistorySort } = useSort()
+  const { sort: countSort, toggleSort: toggleCountSort } = useSort()
 
   const [starting, setStarting] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -47,6 +51,19 @@ export function StockOpnamePage() {
   const items = useMemo(() => active?.items ?? [], [active])
   // Tanpa useMemo: daftar item opname kecil (satuan puluhan), filter langsung cukup.
   const diffItems = items.filter((item) => diffOf(item) !== 0)
+  // Urutan baris hitung boleh diubah user (sort header) — state draft terkunci by item.id.
+  const displayItems = sortRows(items, countSort, (item, key) => {
+    switch (key) {
+      case 'obat':
+        return item.medicine.name
+      case 'batch':
+        return item.batch.batch_number
+      case 'sistem':
+        return item.system_qty
+      default:
+        return null
+    }
+  })
 
   // Alasan wajib untuk setiap selisih — aturan operasional, server tidak memvalidasinya.
   const missingReasons = diffItems.filter((item) => draftOf(item).reason.trim().length < 3)
@@ -210,16 +227,16 @@ export function StockOpnamePage() {
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-                    <th className="px-5 py-3">Obat</th>
-                    <th className="px-4 py-3">Batch</th>
-                    <th className="px-4 py-3 text-right">Stok Sistem</th>
+                    <SortHeader label="Obat" sortKey="obat" sort={countSort} onToggle={toggleCountSort} />
+                    <SortHeader label="Batch" sortKey="batch" sort={countSort} onToggle={toggleCountSort} />
+                    <SortHeader label="Stok Sistem" sortKey="sistem" sort={countSort} onToggle={toggleCountSort} align="right" />
                     <th className="px-4 py-3 text-right">Stok Fisik</th>
                     <th className="px-4 py-3 text-right">Selisih</th>
                     <th className="px-4 py-3">Alasan (wajib bila selisih)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item) => {
+                  {displayItems.map((item) => {
                     const draft = draftOf(item)
                     const diff = diffOf(item)
                     return (
@@ -470,11 +487,11 @@ export function StockOpnamePage() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-                <th className="px-5 py-3">Nomor</th>
-                <th className="px-4 py-3">Tanggal</th>
+                <SortHeader label="Nomor" sortKey="nomor" sort={historySort} onToggle={toggleHistorySort} />
+                <SortHeader label="Tanggal" sortKey="tanggal" sort={historySort} onToggle={toggleHistorySort} />
                 <th className="px-4 py-3">Petugas</th>
-                <th className="px-4 py-3 text-right">Item</th>
-                <th className="px-4 py-3 text-right">Selisih</th>
+                <SortHeader label="Item" sortKey="item" sort={historySort} onToggle={toggleHistorySort} align="right" />
+                <SortHeader label="Selisih" sortKey="selisih" sort={historySort} onToggle={toggleHistorySort} align="right" />
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3" aria-label="Aksi" />
               </tr>
@@ -490,7 +507,20 @@ export function StockOpnamePage() {
                     ))}
                   </tr>
                 ))}
-              {history.data?.data.map((opname) => {
+              {sortRows(history.data?.data ?? [], historySort, (opname, key) => {
+                switch (key) {
+                  case 'nomor':
+                    return opname.opname_number
+                  case 'tanggal':
+                    return opname.opname_at
+                  case 'item':
+                    return opname.summary.total_items
+                  case 'selisih':
+                    return opname.summary.adjusted_items
+                  default:
+                    return null
+                }
+              }).map((opname) => {
                 const status = opnameStatusLabel(opname.status)
                 return (
                   <tr key={opname.id} className="border-t border-line">

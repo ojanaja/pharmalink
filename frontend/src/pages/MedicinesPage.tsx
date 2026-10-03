@@ -5,20 +5,67 @@ import { useNavigate } from 'react-router-dom'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Pagination } from '../components/ui/Pagination'
+import { SortHeader } from '../components/ui/SortHeader'
 import { api } from '../lib/api'
 import { formatRupiah } from '../lib/format'
 import { stockStatus } from '../lib/medicine'
+import { sortRows, useSort } from '../lib/sort'
 import type { LaravelPaginated, Medicine } from '../lib/types'
 import { ImportMedicinesModal } from './MedicinesImportModal'
+
+type StatusFilter = 'all' | 'aman' | 'menipis' | 'habis'
+
+const STATUS_FILTERS: Array<{ key: StatusFilter; label: string }> = [
+  { key: 'all', label: 'Semua' },
+  { key: 'aman', label: 'Stok Aman' },
+  { key: 'menipis', label: 'Menipis' },
+  { key: 'habis', label: 'Stok Habis' },
+]
+
+function statusKey(medicine: Medicine): string {
+  const stock = Number(medicine.stock_total)
+  if (stock <= 0) return 'habis'
+  if (stock <= medicine.min_stock) return 'menipis'
+  return 'aman'
+}
+
+function medicineValue(medicine: Medicine, key: string): string | number | null {
+  switch (key) {
+    case 'code':
+      return medicine.code
+    case 'name':
+      return medicine.name
+    case 'category':
+      return medicine.category?.name ?? null
+    case 'stock':
+      return Number(medicine.stock_total)
+    case 'price':
+      return Number(medicine.sale_price)
+    case 'status':
+      return statusKey(medicine)
+    default:
+      return null
+  }
+}
 
 export function MedicinesPage() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [importOpen, setImportOpen] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const { sort, toggleSort } = useSort()
+
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['medicines', page],
     queryFn: () => api<LaravelPaginated<Medicine>>(`/medicines?page=${page}`),
   })
+
+  // Sort & filter client-side — hanya berlaku untuk halaman data yang sedang tampil (paginasi per 15).
+  const visible = sortRows(
+    (data?.data ?? []).filter((m) => statusFilter === 'all' || statusKey(m) === statusFilter),
+    sort,
+    medicineValue,
+  )
 
   return (
     <div className="flex flex-col gap-4">
@@ -31,17 +78,35 @@ export function MedicinesPage() {
         </div>
       </div>
 
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex gap-2">
+          {STATUS_FILTERS.map((filter) => (
+            <button
+              key={filter.key}
+              type="button"
+              onClick={() => setStatusFilter(filter.key)}
+              aria-pressed={statusFilter === filter.key}
+              className={`rounded-full border px-3.5 py-1.5 text-[13px] font-bold transition-colors ${
+                statusFilter === filter.key
+                  ? 'border-primary bg-primary text-white'
+                  : 'border-line bg-surface text-ink-secondary hover:border-primary hover:text-primary'
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+        <Button variant="secondary" size="sm" icon={<Upload size={14} />} onClick={() => setImportOpen(true)}>
+          Impor
+        </Button>
+      </div>
+
       <div className="overflow-hidden rounded-card border border-line bg-surface shadow-low">
-        <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <div>
-            <h3 className="text-[15px] font-bold text-ink">Daftar Stok Obat</h3>
-            <p className="mt-0.5 text-xs text-ink-secondary">
-              Stok total merupakan akumulasi seluruh batch aktif.
-            </p>
-          </div>
-          <Button variant="secondary" size="sm" icon={<Upload size={14} />} onClick={() => setImportOpen(true)}>
-            Impor
-          </Button>
+        <div className="border-b border-line px-5 py-4">
+          <h3 className="text-[15px] font-bold text-ink">Daftar Stok Obat</h3>
+          <p className="mt-0.5 text-xs text-ink-secondary">
+            Stok total merupakan akumulasi seluruh batch aktif.
+          </p>
         </div>
 
         {isError ? (
@@ -59,13 +124,25 @@ export function MedicinesPage() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-                <th className="px-5 py-3">Kode</th>
-                <th className="px-4 py-3">Nama Obat</th>
-                <th className="px-4 py-3">Kategori</th>
+                <SortHeader label="Kode" sortKey="code" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="Nama Obat" sortKey="name" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="Kategori" sortKey="category" sort={sort} onToggle={toggleSort} />
                 <th className="px-4 py-3">Satuan</th>
-                <th className="px-4 py-3 text-right">Stok Total</th>
-                <th className="px-4 py-3 text-right">Harga Jual</th>
-                <th className="px-4 py-3">Status</th>
+                <SortHeader
+                  label="Stok Total"
+                  sortKey="stock"
+                  sort={sort}
+                  onToggle={toggleSort}
+                  align="right"
+                />
+                <SortHeader
+                  label="Harga Jual"
+                  sortKey="price"
+                  sort={sort}
+                  onToggle={toggleSort}
+                  align="right"
+                />
+                <SortHeader label="Status" sortKey="status" sort={sort} onToggle={toggleSort} />
                 <th className="px-4 py-3" aria-label="Aksi" />
               </tr>
             </thead>
@@ -81,15 +158,15 @@ export function MedicinesPage() {
                   </tr>
                 ))}
 
-              {data && data.data.length === 0 && (
+              {data && visible.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-6 py-16 text-center text-sm text-ink-secondary">
-                    Belum ada data obat.
+                    Tidak ada obat yang cocok dengan filter.
                   </td>
                 </tr>
               )}
 
-              {data?.data.map((medicine) => {
+              {visible.map((medicine) => {
                 const stock = Number(medicine.stock_total)
                 const status = stockStatus(stock, medicine.min_stock)
                 return (

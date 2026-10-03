@@ -1,8 +1,10 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Pagination } from '../../components/ui/Pagination'
+import { SortHeader } from '../../components/ui/SortHeader'
 import { api } from '../../lib/api'
 import { formatDateTimeId } from '../../lib/format'
+import { sortRows, useSort } from '../../lib/sort'
 import type { LaravelPaginated } from '../../lib/types'
 
 interface PurchaseReturnListItem {
@@ -17,10 +19,26 @@ interface PurchaseReturnListItem {
 
 export function PurchaseReturnsPage() {
   const [page, setPage] = useState(1)
+  const { sort, toggleSort } = useSort()
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['purchase-returns', page],
     queryFn: () => api<LaravelPaginated<PurchaseReturnListItem>>(`/purchase-returns?page=${page}`),
     placeholderData: keepPreviousData,
+  })
+
+  const visible = sortRows(data?.data ?? [], sort, (retur, key) => {
+    switch (key) {
+      case 'nomor':
+        return retur.return_number
+      case 'tanggal':
+        return retur.created_at
+      case 'supplier':
+        return retur.supplier?.name ?? null
+      case 'qty':
+        return retur.total_quantity
+      default:
+        return null
+    }
   })
 
   return (
@@ -47,11 +65,11 @@ export function PurchaseReturnsPage() {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-              <th className="px-5 py-3">Nomor Retur</th>
-              <th className="px-4 py-3">Tanggal</th>
-              <th className="px-4 py-3">Supplier</th>
+              <SortHeader label="Nomor Retur" sortKey="nomor" sort={sort} onToggle={toggleSort} />
+              <SortHeader label="Tanggal" sortKey="tanggal" sort={sort} onToggle={toggleSort} />
+              <SortHeader label="Supplier" sortKey="supplier" sort={sort} onToggle={toggleSort} />
               <th className="px-4 py-3 text-right">Item</th>
-              <th className="px-4 py-3 text-right">Total Qty</th>
+              <SortHeader label="Total Qty" sortKey="qty" sort={sort} onToggle={toggleSort} align="right" />
               <th className="px-4 py-3">Alasan</th>
             </tr>
           </thead>
@@ -75,7 +93,7 @@ export function PurchaseReturnsPage() {
               </tr>
             )}
 
-            {data?.data.map((retur) => (
+            {visible.map((retur) => (
               <tr key={retur.id} className="border-t border-line">
                 <td className="px-5 py-3 font-semibold text-ink">{retur.return_number}</td>
                 <td className="px-4 py-3 text-ink-secondary">{formatDateTimeId(retur.created_at)}</td>

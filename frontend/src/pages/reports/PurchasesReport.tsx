@@ -7,6 +7,7 @@ import { formatRupiah } from '../../lib/format'
 import type { PurchasesReport } from '../../lib/types'
 import { ExportButton } from './ExportButton'
 import { currentMonthPeriod } from '../../lib/format'
+import { sortRows, useSort } from '../../lib/sort'
 import { PeriodFilter } from './PeriodFilter'
 import { ReportError, ReportTable } from './shared'
 
@@ -14,6 +15,8 @@ export function PurchasesReport() {
   const initial = currentMonthPeriod()
   const [from, setFrom] = useState(initial.from)
   const [to, setTo] = useState(initial.to)
+  const { sort: supSort, toggleSort: toggleSupSort } = useSort()
+  const { sort: medSort, toggleSort: toggleMedSort } = useSort()
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['report-purchases', from, to],
@@ -63,7 +66,19 @@ export function PurchasesReport() {
             isEmpty={!data || data.data.suppliers.length === 0}
             emptyText="Tidak ada pembelian pada periode ini."
             head={['Supplier', 'Penerimaan', 'Total Pembelian']}
-            rows={(data?.data.suppliers ?? []).map((supplier) => [
+            sortable={{ Supplier: 'nama', 'Total Pembelian': 'total' }}
+            sort={supSort}
+            onSortToggle={toggleSupSort}
+            rows={sortRows(data?.data.suppliers ?? [], supSort, (supplier, key) => {
+              switch (key) {
+                case 'nama':
+                  return supplier.name
+                case 'total':
+                  return Number(supplier.total)
+                default:
+                  return null
+              }
+            }).map((supplier) => [
               <span key="n" className="font-semibold text-ink">
                 {supplier.name}
               </span>,
@@ -81,7 +96,21 @@ export function PurchasesReport() {
             isEmpty={!data || data.data.medicines.length === 0}
             emptyText="Tidak ada pembelian pada periode ini."
             head={['Obat', 'Kuantitas', 'Total']}
-            rows={(data?.data.medicines ?? []).map((medicine) => [
+            sortable={{ Obat: 'nama', Kuantitas: 'qty', Total: 'total' }}
+            sort={medSort}
+            onSortToggle={toggleMedSort}
+            rows={sortRows(data?.data.medicines ?? [], medSort, (medicine, key) => {
+              switch (key) {
+                case 'nama':
+                  return medicine.name
+                case 'qty':
+                  return medicine.quantity
+                case 'total':
+                  return Number(medicine.total)
+                default:
+                  return null
+              }
+            }).map((medicine) => [
               <div key="n">
                 <p className="text-[13px] font-semibold text-ink">{medicine.name}</p>
                 <p className="text-[11px] text-ink-secondary">{medicine.code}</p>

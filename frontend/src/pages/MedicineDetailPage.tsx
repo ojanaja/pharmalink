@@ -4,9 +4,12 @@ import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge } from '../components/ui/Badge'
 import { Pagination } from '../components/ui/Pagination'
+import { SortHeader } from '../components/ui/SortHeader'
+import { Select } from '../components/ui/Field'
 import { api } from '../lib/api'
 import { formatDateId, formatDateTimeId, formatRupiah } from '../lib/format'
 import { movementTypeLabel, stockStatus } from '../lib/medicine'
+import { sortRows, useSort } from '../lib/sort'
 import type { Batch, LaravelPaginated, Medicine, StockMovement } from '../lib/types'
 import { AdjustmentModal } from './AdjustmentModal'
 
@@ -35,6 +38,9 @@ export function MedicineDetailPage() {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [adjusting, setAdjusting] = useState<Batch | null>(null)
+  const [movementTypeFilter, setMovementTypeFilter] = useState('all')
+  const { sort: batchSort, toggleSort: toggleBatchSort } = useSort()
+  const { sort: movementSort, toggleSort: toggleMovementSort } = useSort()
 
   const medicineQuery = useQuery({
     queryKey: ['medicine', id],
@@ -49,9 +55,46 @@ export function MedicineDetailPage() {
 
   const medicine = medicineQuery.data?.data
   // Batch diurutkan kedaluwarsa terdekat dulu — prioritas FEFO untuk pengeluaran stok.
-  const batches = useMemo(
+  const batchesFefo = useMemo(
     () => [...(medicine?.batches ?? [])].sort((a, b) => a.expiry_date.localeCompare(b.expiry_date)),
     [medicine],
+  )
+  // Tampilan tabel batch bisa di-sort user; urutan FEFO tetap dipakai untuk catatan FEFO.
+  const batches = sortRows(batchesFefo, batchSort, (batch, key) => {
+    switch (key) {
+      case 'batch':
+        return batch.batch_number
+      case 'expiry':
+        return batch.expiry_date
+      case 'qty':
+        return batch.quantity_on_hand
+      case 'price':
+        return Number(batch.purchase_price)
+      default:
+        return null
+    }
+  })
+
+  // Filter tipe + sort kartu stok — client-side di halaman yang sedang tampil.
+  const visibleMovements = sortRows(
+    (movementsQuery.data?.data ?? []).filter(
+      (m) => movementTypeFilter === 'all' || m.type === movementTypeFilter,
+    ),
+    movementSort,
+    (m, key) => {
+      switch (key) {
+        case 'tanggal':
+          return m.created_at
+        case 'tipe':
+          return m.type
+        case 'qty':
+          return Math.abs(m.quantity)
+        case 'saldo':
+          return m.balance_after
+        default:
+          return null
+      }
+    },
   )
 
   if (medicineQuery.isPending) {
@@ -188,10 +231,16 @@ export function MedicineDetailPage() {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-              <th className="px-5 py-3">Batch</th>
-              <th className="px-4 py-3">Expired</th>
-              <th className="px-4 py-3 text-right">Qty</th>
-              <th className="px-4 py-3 text-right">Harga Beli</th>
+              <SortHeader label="Batch" sortKey="batch" sort={batchSort} onToggle={toggleBatchSort} />
+              <SortHeader label="Expired" sortKey="expiry" sort={batchSort} onToggle={toggleBatchSort} />
+              <SortHeader label="Qty" sortKey="qty" sort={batchSort} onToggle={toggleBatchSort} align="right" />
+              <SortHeader
+                label="Harga Beli"
+                sortKey="price"
+                sort={batchSort}
+                onToggle={toggleBatchSort}
+                align="right"
+              />
               <th className="px-4 py-3" aria-label="Aksi" />
             </tr>
           </thead>
@@ -266,11 +315,29 @@ export function MedicineDetailPage() {
 
       {/* Kartu stok */}
       <div className="overflow-hidden rounded-card border border-line bg-surface">
-        <div className="border-b border-line px-5 py-4">
-          <h3 className="text-[15px] font-bold text-ink">Kartu Stok</h3>
-          <p className="mt-0.5 text-xs text-ink-secondary">
-            Riwayat seluruh pergerakan stok obat ini.
-          </p>
+        <div className="flex items-center justify-between border-b border-line px-5 py-4">
+          <div>
+            <h3 className="text-[15px] font-bold text-ink">Kartu Stok</h3>
+            <p className="mt-0.5 text-xs text-ink-secondary">
+              Riwayat seluruh pergerakan stok obat ini.
+            </p>
+          </div>
+          <div className="w-48">
+            <Select
+              value={movementTypeFilter}
+              onChange={(event) => setMovementTypeFilter(event.target.value)}
+              aria-label="Filter tipe pergerakan"
+            >
+              <option value="all">Semua tipe</option>
+              <option value="sale">Penjualan</option>
+              <option value="sale_cancellation">Pembatalan</option>
+              <option value="purchase_receipt">Penerimaan</option>
+              <option value="adjustment">Koreksi</option>
+              <option value="opname">Opname</option>
+              <option value="return_in">Retur Masuk</option>
+              <option value="return_out">Retur Keluar</option>
+            </Select>
+          </div>
         </div>
 
         {movementsQuery.isError ? (
@@ -288,13 +355,13 @@ export function MedicineDetailPage() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
-                <th className="px-5 py-3">Tanggal</th>
-                <th className="px-4 py-3">Tipe</th>
+                <SortHeader label="Tanggal" sortKey="tanggal" sort={movementSort} onToggle={toggleMovementSort} />
+                <SortHeader label="Tipe" sortKey="tipe" sort={movementSort} onToggle={toggleMovementSort} />
                 <th className="px-4 py-3">Referensi</th>
                 <th className="px-4 py-3">Batch</th>
                 <th className="px-4 py-3 text-right">Masuk</th>
                 <th className="px-4 py-3 text-right">Keluar</th>
-                <th className="px-4 py-3 text-right">Saldo</th>
+                <SortHeader label="Saldo" sortKey="saldo" sort={movementSort} onToggle={toggleMovementSort} align="right" />
               </tr>
             </thead>
             <tbody>
@@ -309,15 +376,15 @@ export function MedicineDetailPage() {
                   </tr>
                 ))}
 
-              {movementsQuery.data && movementsQuery.data.data.length === 0 && (
+              {movementsQuery.data && visibleMovements.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-sm text-ink-secondary">
-                    Belum ada pergerakan stok.
+                    Tidak ada pergerakan stok yang cocok dengan filter.
                   </td>
                 </tr>
               )}
 
-              {movementsQuery.data?.data.map((movement) => {
+              {visibleMovements.map((movement) => {
                 const type = movementTypeLabel(movement.type)
                 const qtyIn = movement.quantity > 0 ? movement.quantity : null
                 const qtyOut = movement.quantity < 0 ? Math.abs(movement.quantity) : null
