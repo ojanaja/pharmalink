@@ -37,6 +37,7 @@ Catatan keamanan lokal: `POST /api/auth/login` dibatasi 5 percobaan per menit (t
 - [docs/SETUP.md](docs/SETUP.md) — setup lokal dan perintah harian.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — stack, struktur, dan prinsip domain.
 - [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) — milestone, keputusan, asumsi, dan pemeriksaan yang dijalankan.
+- [docs/DIAGRAMS.md](docs/DIAGRAMS.md) — diagram mermaid (use case, DFD, ERD, flowchart, activity, sequence, class, state, deployment).
 - [docs/DOCUMENTATION_STANDARD.md](docs/DOCUMENTATION_STANDARD.md) — standar dokumentasi kode.
 
 Untuk development dengan Kimi Code: `./scripts/start-kimi.sh` (membuka sesi dengan agent `pharmalink-lead`); profil spesialis ada di `.agents/agents/` dan dijelaskan di [docs/AGENCY_AGENTS.md](docs/AGENCY_AGENTS.md).
