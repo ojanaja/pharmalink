@@ -1,7 +1,7 @@
 import { Download } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '../../components/ui/Button'
-import { getToken } from '../../lib/api'
+import { authFetch } from '../../lib/api'
 
 interface ExportButtonProps {
   report: 'sales' | 'purchases' | 'stock' | 'expiry'
@@ -25,9 +25,7 @@ export function ExportButton({ report, params = {}, format = 'csv' }: ExportButt
       for (const [key, value] of Object.entries(params)) {
         if (value !== undefined && value !== '') query.set(key, String(value))
       }
-      const response = await fetch(`/api/reports/${report}/export?${query}`, {
-        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
-      })
+      const response = await authFetch(`/api/reports/${report}/export?${query}`)
       if (!response.ok) throw new Error('export gagal')
       const blob = await response.blob()
       const disposition = response.headers.get('Content-Disposition') ?? ''

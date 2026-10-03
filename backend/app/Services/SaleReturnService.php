@@ -38,7 +38,16 @@ class SaleReturnService
         }
 
         return DB::transaction(function () use ($sale, $data, $user) {
-            $saleItems = $sale->items()->lockForUpdate()->get()->keyBy('id');
+            // Kunci baris sale + re-check status di dalam transaksi (pola SaleVoidService).
+            $lockedSale = Sale::whereKey($sale->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedSale->status !== SaleStatus::Completed) {
+                throw new HttpResponseException(response()->json([
+                    'message' => "Transaksi {$lockedSale->invoice_number} tidak dapat diretur (status bukan completed).",
+                ], 409));
+            }
+
+            $saleItems = $lockedSale->items()->lockForUpdate()->get()->keyBy('id');
 
             $return = SaleReturn::create([
                 'return_number' => $this->numbers->generate('RET', 'sale_returns', 'return_number'),

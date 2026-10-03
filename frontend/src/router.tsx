@@ -10,9 +10,17 @@ import { LoginPage } from './pages/LoginPage'
 import { MasterDataPage } from './pages/master/MasterDataPage'
 import { MedicinesPage } from './pages/MedicinesPage'
 import { MedicineDetailPage } from './pages/MedicineDetailPage'
-import { PlaceholderPage } from './pages/PlaceholderPage'
 import { PurchaseOrderDetailPage } from './pages/purchases/PurchaseOrderDetailPage'
+import { PurchaseReturnsPage } from './pages/purchases/PurchaseReturnsPage'
 import { PurchasesPage } from './pages/purchases/PurchasesPage'
+import { PurchasesTabs } from './pages/purchases/PurchasesTabs'
+import { SalesHistoryPage } from './pages/sales/SalesHistoryPage'
+import { SalesTabs } from './pages/sales/SalesTabs'
+import { AccessMatrixTab, UsersPage } from './pages/settings/UsersPage'
+import { ProfileTab } from './pages/settings/ProfileTab'
+import { SettingsIndex, SettingsPage } from './pages/settings/SettingsPage'
+import { TransactionTab } from './pages/settings/TransactionTab'
+import { StockOpnamePage } from './pages/stock-opname/StockOpnamePage'
 import { ExpiryReport } from './pages/reports/ExpiryReport'
 import { ProfitLossReport } from './pages/reports/ProfitLossReport'
 import { PurchasesReport } from './pages/reports/PurchasesReport'
@@ -70,11 +78,18 @@ export function App() {
                 }
               />
               <Route path="/dashboard" element={<Navigate to="/" replace />} />
-              <Route path="/penjualan" element={<CashierPage />} />
+              <Route path="/penjualan" element={<SalesTabs />}>
+                <Route index element={<CashierPage />} />
+                <Route path="riwayat" element={<SalesHistoryPage />} />
+              </Route>
+              <Route path="/stock-opname" element={<StockOpnamePage />} />
               <Route path="/persediaan" element={<MedicinesPage />} />
               <Route path="/persediaan/:id" element={<MedicineDetailPage />} />
-              <Route path="/pembelian" element={<PurchasesPage />} />
-              <Route path="/pembelian/:id" element={<PurchaseOrderDetailPage />} />
+              <Route path="/pembelian" element={<PurchasesTabs />}>
+                <Route index element={<PurchasesPage />} />
+                <Route path="retur" element={<PurchaseReturnsPage />} />
+                <Route path=":id" element={<PurchaseOrderDetailPage />} />
+              </Route>
               <Route path="/master-data" element={<MasterDataPage />} />
               <Route element={<ReportsPage />}>
                 <Route path="/laporan" element={<ReportsIndex />} />
@@ -84,7 +99,13 @@ export function App() {
                 <Route path="/laporan/kedaluwarsa" element={<ExpiryReport />} />
                 <Route path="/laporan/laba-rugi" element={<ProfitLossReport />} />
               </Route>
-              <Route path="/pengaturan" element={<PlaceholderPage title="Pengaturan" />} />
+              <Route path="/pengaturan" element={<SettingsPage />}>
+                <Route index element={<SettingsIndex />} />
+                <Route path="profil" element={<ProfileTab />} />
+                <Route path="transaksi" element={<TransactionTab />} />
+                <Route path="users" element={<UsersPage />} />
+                <Route path="matriks" element={<AccessMatrixTab />} />
+              </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

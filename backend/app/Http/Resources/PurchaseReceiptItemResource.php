@@ -23,6 +23,9 @@ class PurchaseReceiptItemResource extends JsonResource
                 'batch_number' => $this->batch->batch_number,
                 'expiry_date' => $this->batch->expiry_date?->toDateString(),
             ]),
+            // Diisi PurchaseOrderController@show: agregat retur pembelian (batas retur).
+            'returned_quantity' => $this->when(isset($this->returned_quantity), $this->returned_quantity),
+            'returnable_quantity' => $this->when(isset($this->returnable_quantity), $this->returnable_quantity),
         ];
     }
 }

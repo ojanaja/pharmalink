@@ -43,7 +43,10 @@ class Money
 
     public static function toDecimal(int $cents): string
     {
-        return sprintf('%d.%02d', intdiv($cents, 100), $cents % 100);
+        // Format negatif benar: -150 sen -> "-1.50" (bukan "-1.-50").
+        $sign = $cents < 0 ? '-' : '';
+
+        return sprintf('%s%d.%02d', $sign, intdiv(abs($cents), 100), abs($cents) % 100);
     }
 
     /**

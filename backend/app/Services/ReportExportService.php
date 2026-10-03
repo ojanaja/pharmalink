@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Support\Money;
 use Carbon\Carbon;
 use Illuminate\Http\Response;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
@@ -115,14 +116,33 @@ class ReportExportService
     }
 
     /**
+     * Satu sel CSV: cegah formula injection (sel diawali =,+,-,@ diprefix ')
+     * lalu quoting RFC-4180 bila mengandung delimiter/quote/newline.
+     */
+    protected function csvCell(string|int $value): string
+    {
+        $v = (string) $value;
+
+        if (preg_match('/^[=+\-@]/', $v)) {
+            $v = "'".$v;
+        }
+
+        if (str_contains($v, ';') || str_contains($v, '"') || str_contains($v, "\n") || str_contains($v, "\r")) {
+            $v = '"'.str_replace('"', '""', $v).'"';
+        }
+
+        return $v;
+    }
+
+    /**
      * @param  array<int, string>  $headings
      * @param  array<int, array<int, string|int>>  $rows
      */
     protected function csv(array $headings, array $rows, string $filename): Response
     {
-        $lines = [implode(';', $headings)];
+        $lines = [implode(';', array_map($this->csvCell(...), $headings))];
         foreach ($rows as $row) {
-            $lines[] = implode(';', $row);
+            $lines[] = implode(';', array_map($this->csvCell(...), $row));
         }
 
         return response("\u{FEFF}".implode("\r\n", $lines)."\r\n", 200, [
@@ -137,16 +157,31 @@ class ReportExportService
      */
     protected function xlsx(array $headings, array $rows, string $filename): Response
     {
-        $sheet = (new Spreadsheet())->getActiveSheet();
-        $sheet->fromArray($headings, null, 'A1');
-        $sheet->fromArray($rows, null, 'A2');
-        $sheet->getStyle('A1')->getFont()->setBold(true);
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
 
+        // Semua sel ditulis eksplisit sebagai string — kolom input pengguna
+        // (nama obat, batch, supplier) tidak boleh diinterpretasi sebagai
+        // formula oleh Excel (mis. "=1+1" harus tetap literal).
+        $writeRow = function (array $row, int $excelRow) use ($sheet) {
+            $col = 1;
+            foreach ($row as $value) {
+                $sheet->setCellValueExplicit([$col, $excelRow], (string) $value, DataType::TYPE_STRING);
+                $col++;
+            }
+        };
+
+        $writeRow($headings, 1);
+        foreach (array_values($rows) as $i => $row) {
+            $writeRow($row, $i + 2);
+        }
+
+        $sheet->getStyle('A1')->getFont()->setBold(true);
         foreach (range('A', chr(ord('A') + count($headings) - 1)) as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
-        $writer = new Xlsx($sheet->getParent());
+        $writer = new Xlsx($spreadsheet);
         ob_start();
         $writer->save('php://output');
         $content = ob_get_clean();

@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Info } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, Info, Wrench } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge } from '../components/ui/Badge'
@@ -8,6 +8,7 @@ import { api } from '../lib/api'
 import { formatDateId, formatDateTimeId, formatRupiah } from '../lib/format'
 import { movementTypeLabel, stockStatus } from '../lib/medicine'
 import type { Batch, LaravelPaginated, Medicine, StockMovement } from '../lib/types'
+import { AdjustmentModal } from './AdjustmentModal'
 
 interface MedicineDetail extends Medicine {
   description: string | null
@@ -31,7 +32,9 @@ function expiryVariant(days: number): { label: string; className: string } {
 
 export function MedicineDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
+  const [adjusting, setAdjusting] = useState<Batch | null>(null)
 
   const medicineQuery = useQuery({
     queryKey: ['medicine', id],
@@ -189,12 +192,13 @@ export function MedicineDetailPage() {
               <th className="px-4 py-3">Expired</th>
               <th className="px-4 py-3 text-right">Qty</th>
               <th className="px-4 py-3 text-right">Harga Beli</th>
+              <th className="px-4 py-3" aria-label="Aksi" />
             </tr>
           </thead>
           <tbody>
             {batches.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-6 py-12 text-center text-sm text-ink-secondary">
+                <td colSpan={5} className="px-6 py-12 text-center text-sm text-ink-secondary">
                   Belum ada batch untuk obat ini.
                 </td>
               </tr>
@@ -225,6 +229,16 @@ export function MedicineDetailPage() {
                   <td className="px-4 py-3 text-right text-[13px] text-ink-secondary">
                     {formatRupiah(batch.purchase_price)}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      aria-label={`Koreksi stok batch ${batch.batch_number}`}
+                      onClick={() => setAdjusting(batch)}
+                      className="text-ink-secondary transition-colors hover:text-primary"
+                    >
+                      <Wrench size={15} />
+                    </button>
+                  </td>
                 </tr>
               )
             })}
@@ -236,6 +250,19 @@ export function MedicineDetailPage() {
           {nearestBatch ? ` (${nearestBatch.batch_number})` : ''} diprioritaskan.
         </div>
       </div>
+
+      <AdjustmentModal
+        open={adjusting !== null}
+        medicineName={medicine.name}
+        batch={adjusting}
+        onClose={() => setAdjusting(null)}
+        onSaved={() => {
+          setAdjusting(null)
+          // Koreksi mengubah qty batch + menambah movement — segarkan keduanya.
+          queryClient.invalidateQueries({ queryKey: ['medicine', id] })
+          queryClient.invalidateQueries({ queryKey: ['movements', id] })
+        }}
+      />
 
       {/* Kartu stok */}
       <div className="overflow-hidden rounded-card border border-line bg-surface">

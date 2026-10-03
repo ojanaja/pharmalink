@@ -52,8 +52,8 @@ const QUICK_ACTIONS = [
     icon: ClipboardList,
     title: 'Stock Opname',
     desc: 'Cocokkan stok',
-    to: null, // belum ada rute/modul — sengaja nonaktif
-    enabled: false,
+    to: '/stock-opname',
+    enabled: true,
   },
   {
     icon: CalendarClock,

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -24,6 +25,15 @@ class AuthController extends Controller
             throw ValidationException::withMessages([
                 'email' => ['Kredensial tidak cocok.'],
             ]);
+        }
+
+        // User nonaktif: tolak login (403) dan pastikan tidak ada token tersisa.
+        if (! $user->is_active) {
+            $user->tokens()->delete();
+
+            throw new HttpResponseException(response()->json([
+                'message' => 'Akun nonaktif. Hubungi owner.',
+            ], 403));
         }
 
         $token = $user->createToken('api')->plainTextToken;

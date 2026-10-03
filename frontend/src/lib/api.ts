@@ -1,4 +1,6 @@
 const TOKEN_KEY = 'pharmalink_token'
+export const USER_KEY = 'pharmalink_user'
+const LOGOUT_EVENT = 'pharmalink:logout'
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
@@ -10,6 +12,38 @@ export function setToken(token: string | null): void {
   } else {
     localStorage.setItem(TOKEN_KEY, token)
   }
+}
+
+/** Hapus sesi lengkap (token + user) dan beri tahu AuthProvider agar state ikut logout. */
+export function clearAuthStorage(): void {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
+  window.dispatchEvent(new Event(LOGOUT_EVENT))
+}
+
+export function onForcedLogout(handler: () => void): () => void {
+  window.addEventListener(LOGOUT_EVENT, handler)
+  return () => window.removeEventListener(LOGOUT_EVENT, handler)
+}
+
+/** Redirect sekali saja — mencegah loop bila banyak query 401 bersamaan. */
+function redirectToLogin(): void {
+  if (!window.location.pathname.startsWith('/login')) {
+    window.location.assign('/login')
+  }
+}
+
+/** Fetch dengan Bearer + penanganan 401 terpusat (dipakai juga unduh/export/impor). */
+export async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers)
+  const token = getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  const response = await fetch(path, { ...init, headers })
+  if (response.status === 401) {
+    clearAuthStorage()
+    redirectToLogin()
+  }
+  return response
 }
 
 export class ApiError extends Error {
@@ -44,10 +78,8 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   })
 
   if (response.status === 401) {
-    setToken(null)
-    if (!window.location.pathname.startsWith('/login')) {
-      window.location.assign('/login')
-    }
+    clearAuthStorage()
+    redirectToLogin()
     throw new ApiError(401, 'Sesi berakhir. Silakan masuk kembali.')
   }
 

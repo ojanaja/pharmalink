@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, PackageCheck } from 'lucide-react'
+import { ArrowLeft, PackageCheck, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
@@ -7,12 +7,15 @@ import { Button } from '../../components/ui/Button'
 import { api } from '../../lib/api'
 import { formatDateId, formatDateTimeId, formatRupiah } from '../../lib/format'
 import { poStatusLabel } from '../../lib/medicine'
-import type { PurchaseOrderDetail } from '../../lib/types'
+import type { PurchaseOrderDetail, PurchaseReceiptItem } from '../../lib/types'
+import { PurchaseReturnModal } from './PurchaseReturnModal'
 import { ReceiptFormModal } from './ReceiptFormModal'
 
 export function PurchaseOrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [receiptOpen, setReceiptOpen] = useState(false)
+  const [returnTarget, setReturnTarget] = useState<PurchaseReceiptItem | null>(null)
+  const [returnSaved, setReturnSaved] = useState<string | null>(null)
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['purchase-order', id],
@@ -164,6 +167,22 @@ export function PurchaseOrderDetailPage() {
                       <td className="px-4 py-2 text-right text-[13px] font-semibold text-ink">
                         {formatRupiah(item.unit_cost)}
                       </td>
+                      <td className="px-4 py-2 text-right">
+                        {item.returnable_quantity > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setReturnTarget(item)}
+                            className="inline-flex items-center gap-1 text-[12px] font-bold text-primary hover:underline"
+                          >
+                            <RotateCcw size={12} aria-hidden="true" />
+                            Retur (sisa {item.returnable_quantity})
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-placeholder">
+                            {item.returned_quantity > 0 ? 'Sudah diretur' : '—'}
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -183,6 +202,33 @@ export function PurchaseOrderDetailPage() {
           refetch()
         }}
       />
+
+      <PurchaseReturnModal
+        open={returnTarget !== null}
+        supplierId={po.supplier?.id ?? null}
+        item={
+          returnTarget
+            ? {
+                id: returnTarget.id,
+                medicineName: returnTarget.medicine?.name ?? '—',
+                batchNumber: returnTarget.batch?.batch_number ?? '—',
+                returnable: returnTarget.returnable_quantity,
+              }
+            : null
+        }
+        onClose={() => setReturnTarget(null)}
+        onSaved={(returnNumber) => {
+          setReturnTarget(null)
+          setReturnSaved(returnNumber)
+          refetch()
+        }}
+      />
+
+      {returnSaved && (
+        <p className="rounded-lg bg-success-bg px-4 py-2.5 text-[13px] text-success-ink">
+          Retur {returnSaved} tersimpan — stok batch berkurang dan dicatat pada kartu stok.
+        </p>
+      )}
     </div>
   )
 }

@@ -1,17 +1,20 @@
 import { useQuery } from '@tanstack/react-query'
-import { Eye } from 'lucide-react'
+import { Eye, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../components/ui/Badge'
+import { Button } from '../components/ui/Button'
 import { Pagination } from '../components/ui/Pagination'
 import { api } from '../lib/api'
 import { formatRupiah } from '../lib/format'
 import { stockStatus } from '../lib/medicine'
 import type { LaravelPaginated, Medicine } from '../lib/types'
+import { ImportMedicinesModal } from './MedicinesImportModal'
 
 export function MedicinesPage() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
+  const [importOpen, setImportOpen] = useState(false)
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['medicines', page],
     queryFn: () => api<LaravelPaginated<Medicine>>(`/medicines?page=${page}`),
@@ -29,11 +32,16 @@ export function MedicinesPage() {
       </div>
 
       <div className="overflow-hidden rounded-card border border-line bg-surface shadow-low">
-        <div className="border-b border-line px-5 py-4">
-          <h3 className="text-[15px] font-bold text-ink">Daftar Stok Obat</h3>
-          <p className="mt-0.5 text-xs text-ink-secondary">
-            Stok total merupakan akumulasi seluruh batch aktif.
-          </p>
+        <div className="flex items-center justify-between border-b border-line px-5 py-4">
+          <div>
+            <h3 className="text-[15px] font-bold text-ink">Daftar Stok Obat</h3>
+            <p className="mt-0.5 text-xs text-ink-secondary">
+              Stok total merupakan akumulasi seluruh batch aktif.
+            </p>
+          </div>
+          <Button variant="secondary" size="sm" icon={<Upload size={14} />} onClick={() => setImportOpen(true)}>
+            Impor
+          </Button>
         </div>
 
         {isError ? (
@@ -136,6 +144,12 @@ export function MedicinesPage() {
           />
         )}
       </div>
+
+      <ImportMedicinesModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={() => refetch()}
+      />
     </div>
   )
 }

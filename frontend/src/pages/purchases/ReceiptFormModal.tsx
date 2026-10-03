@@ -4,10 +4,11 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
 import { ApiError, api } from '../../lib/api'
+import { todayLocal } from '../../lib/format'
 import type { PoItem } from '../../lib/types'
 
-// Tanggal hari ini (Y-m-d) untuk validasi client expiry_date; dihitung sekali saat modul dimuat.
-const TODAY = new Date().toISOString().slice(0, 10)
+// Tanggal hari ini (Y-m, waktu lokal) untuk validasi client expiry_date; dihitung sekali saat modul dimuat.
+const TODAY = todayLocal()
 
 /** Bentuk `errors.items` saat 422 penerimaan melebihi sisa pesanan. */
 interface ReceiptErrorItem {

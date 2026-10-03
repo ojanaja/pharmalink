@@ -32,6 +32,18 @@ export function poStatusLabel(status: string): { label: string; variant: BadgeVa
   return PO_STATUS[status] ?? { label: status, variant: 'neutral' }
 }
 
+/** Status stock opname & penjualan dari backend. */
+export function opnameStatusLabel(status: string): { label: string; variant: BadgeVariant } {
+  if (status === 'confirmed') return { label: 'Selesai', variant: 'success' }
+  return { label: 'Draft', variant: 'neutral' }
+}
+
+export function saleStatusLabel(status: string): { label: string; variant: BadgeVariant } {
+  if (status === 'completed') return { label: 'Selesai', variant: 'success' }
+  if (status === 'cancelled') return { label: 'Dibatalkan', variant: 'danger' }
+  return { label: status, variant: 'neutral' }
+}
+
 /** Label Bahasa Indonesia per MovementType backend; tipe tak dikenal ditampilkan apa adanya. */
 const MOVEMENT_LABELS: Record<string, { label: string; variant: BadgeVariant }> = {
   sale: { label: 'Penjualan', variant: 'neutral' },

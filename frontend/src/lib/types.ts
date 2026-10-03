@@ -8,6 +8,7 @@ export interface Medicine {
   min_stock: number
   stock_total: string
   is_active: boolean
+  description: string | null
 }
 
 export interface LaravelMeta {
@@ -76,6 +77,7 @@ export interface SaleTransaction {
   discount: string | null
   total: string
   payment_method: string | null
+  status: string
   user: { id: number; name: string } | null
   items_count?: number
 }
@@ -177,6 +179,9 @@ export interface PurchaseReceiptItem {
   unit_cost: string
   medicine: { id: number; code: string; name: string } | null
   batch: { id: number; batch_number: string } | null
+  /** Agregat retur pembelian per receipt item (M8). */
+  returned_quantity: number
+  returnable_quantity: number
 }
 
 export interface PurchaseReceipt {
@@ -199,4 +204,81 @@ export interface PurchaseOrderDetail {
   total: string
   items: PoItem[]
   receipts: PurchaseReceipt[]
+}
+
+export interface OpnameItem {
+  id: number
+  system_qty: number
+  /** Snapshot awal = system_qty; berubah via PUT counts. */
+  physical_qty: number
+  difference: number
+  reason: string | null
+  medicine: { id: number; code: string; name: string }
+  batch: { id: number; batch_number: string; expiry_date: string }
+}
+
+export interface StockOpname {
+  id: number
+  opname_number: string
+  opname_at: string
+  status: string
+  note: string | null
+  user: { id: number; name: string } | null
+  summary: {
+    total_items: number
+    adjusted_items: number
+    increased_items: number
+    decreased_items: number
+  }
+  items?: OpnameItem[]
+}
+
+export interface SaleItemDetail {
+  id: number
+  quantity: number
+  unit_price: string
+  subtotal: string
+  medicine: { id: number; code: string; name: string } | null
+  batch: { id: number; batch_number: string } | null
+  returned_quantity: number
+  returnable_quantity: number
+}
+
+export interface SaleDetail {
+  id: number
+  invoice_number: string
+  sold_at: string
+  subtotal: string
+  discount: string | null
+  total: string
+  payment_method: string | null
+  status: string
+  user: { id: number; name: string } | null
+  items: SaleItemDetail[]
+  cancelled_reason: string | null
+  cancelled_at: string | null
+  cancelled_by: { id: number; name: string } | null
+}
+
+export interface PharmacySettings {
+  id: number
+  name: string
+  license_number: string | null
+  pharmacist_name: string | null
+  address: string | null
+  phone: string | null
+  expiry_warning_days: number
+  invoice_prefix: string
+  po_prefix: string
+  receipt_prefix: string
+  opname_prefix: string
+}
+
+export interface AppUser {
+  id: number
+  name: string
+  email: string
+  role: string
+  is_active: boolean
+  created_at: string
 }

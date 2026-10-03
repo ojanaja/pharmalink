@@ -14,6 +14,7 @@ class SaleItem extends Model
         'batch_id',
         'quantity',
         'unit_price',
+        'cost_price',
         'subtotal',
     ];
 
@@ -22,6 +23,7 @@ class SaleItem extends Model
         return [
             'quantity' => 'integer',
             'unit_price' => 'decimal:2',
+            'cost_price' => 'decimal:2',
             'subtotal' => 'decimal:2',
         ];
     }

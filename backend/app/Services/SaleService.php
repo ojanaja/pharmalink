@@ -117,7 +117,8 @@ class SaleService
                 'medicine_id' => $item['medicine_id'],
                 'batch_id' => $batch->id,
                 'quantity' => $take,
-                'unit_price' => $unitPrice,
+'unit_price' => $unitPrice,
+                'cost_price' => $batch->purchase_price,
                 'subtotal' => $this->toDecimal($this->toCents($unitPrice) * $take),
             ]);
 

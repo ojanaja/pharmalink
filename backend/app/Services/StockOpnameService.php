@@ -100,6 +100,8 @@ class StockOpnameService
 
     /**
      * Konfirmasi opname: tulis movement hanya untuk selisih != 0.
+     * Selisih dihitung dari SALDO LIVE batch (bukan snapshot system_qty yang
+     * bisa basi); bila stok bergerak sejak snapshot -> 422, minta sesi baru.
      * Opname confirmed bersifat immutable.
      */
     public function confirm(StockOpname $opname): StockOpname
@@ -107,29 +109,49 @@ class StockOpnameService
         $this->assertDraft($opname);
 
         return DB::transaction(function () use ($opname) {
-            $items = $opname->items()->with('batch')->lockForUpdate()->get();
+            // Kunci baris opname + re-check status di dalam transaksi (pola SaleVoidService).
+            $locked = StockOpname::whereKey($opname->id)->lockForUpdate()->firstOrFail();
+            $this->assertDraft($locked);
+
+            $items = $locked->items()->lockForUpdate()->get();
+
+            $liveBatches = Batch::query()
+                ->whereIn('id', $items->pluck('batch_id')->filter())
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
 
             foreach ($items as $item) {
-                $diff = $item->physical_qty - $item->system_qty;
+                $batch = $liveBatches->get($item->batch_id);
+                $liveQty = $batch !== null ? (int) $batch->quantity_on_hand : 0;
+
+                // Snapshot basi: stok bergerak sejak sesi dibuat.
+                if ($item->system_qty !== $liveQty) {
+                    throw ValidationException::withMessages([
+                        'opname' => ["Stok batch #{$item->batch_id} berubah sejak snapshot (sistem {$item->system_qty}, sekarang {$liveQty}). Buat sesi opname baru."],
+                    ]);
+                }
+
+                $diff = $item->physical_qty - $liveQty;
 
                 if ($diff === 0) {
                     continue;
                 }
 
-                $reason = $item->reason ?? "Stock opname {$opname->opname_number}";
+                $reason = $item->reason ?? "Stock opname {$locked->opname_number}";
                 $type = MovementType::Opname;
 
                 if ($diff > 0) {
-                    $this->stock->add($item->batch, $diff, $type, $opname, $reason);
+                    $this->stock->add($batch, $diff, $type, $locked, $reason);
                 } else {
-                    $this->stock->deduct($item->batch, abs($diff), $type, $opname, $reason);
+                    $this->stock->deduct($batch, abs($diff), $type, $locked, $reason);
                 }
             }
 
-            $opname->status = OpnameStatus::Confirmed;
-            $opname->save();
+            $locked->status = OpnameStatus::Confirmed;
+            $locked->save();
 
-            return $opname->load(['items.batch:id,batch_number,expiry_date', 'items.medicine:id,code,name']);
+            return $locked->load(['items.batch:id,batch_number,expiry_date', 'items.medicine:id,code,name']);
         });
     }
 

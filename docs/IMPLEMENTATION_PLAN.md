@@ -129,6 +129,43 @@ Pembelian (/pembelian, #50:823 + #42:1290): daftar PO (filter status/supplier, c
 
 Pemeriksaan: tsc 0, build sukses, oxlint 0/0 (45 file), smoke 3 route 200, alur nyata via proxy (PO-20261002-0001 terbuat).
 
+#### F6 — Opname + koreksi + penerimaan manual + retur/void ✅ selesai 2026-10-02
+
+Stock Opname wizard 2 langkah (#44:* pola shell D diadopsi, token shell A): sesi POST → Hitung (physical_qty per item, selisih live, alasan wajib saat selisih di-enforce client — server nullable) → Konfirmasi ringkasan selisih + modal DS → confirm. Riwayat opname + detail baca-saja. Koreksi stok dari Detail Obat per batch (radio Masuk/Keluar → signed int, reason ≥5). Penerimaan manual dari halaman Pembelian (item dinamis + batch/expiry, guard batch 422). Retur + riwayat penjualan: sub-nav Kasir|Riwayat, filter tanggal, detail modal dengan returned/returnable, ReturnModal, VoidModal (owner-only dari role context). Dashboard quick action opname di-enable. Infra: container backend sempat gagal start karena image tanpa ext-gd + composer install di setiap start (sejak PhpSpreadsheet M6) → Dockerfile diperbaiki (gd + libpng/jpeg) dan image di-rebuild permanen.
+
+Pemeriksaan: tsc -b 0 (mulai F6; tsc --noEmit ternyata tak mengecek project references — 1 error type lama ikut diperbaiki), build sukses, oxlint 0/0 (50 file), smoke 3 route 200, alur nyata: OPN-20261002-0002 dibuat → adjust 1 item → confirmed.
+
+#### F5 — Pengaturan + User & Hak Akses ✅ selesai 2026-10-02
+
+Backend F5a: GET/PUT /api/settings (singleton, PUT owner-only), user management owner-only (list/create/update/reset-password/toggle-active), migration users.is_active, login user nonaktif → 403 + token dicabut, self-protection + last-owner protection (422). 97 test hijau.
+
+Frontend F5b: /pengaturan 4 tab pill (Profil #45:7995 + footer form DS 03, Transaksi = 4 prefix + expiry 1-90, User & Hak Akses #45:9229 tabel + modal tambah/edit/reset-password/nonaktifkan, Matriks Akses statis informatif). Seluruh /pengaturan owner-only (kartu "Akses dibatasi" untuk apoteker). Yang tidak ada backend-nya tidak digambar: diskon maks/pembulatan/toggle kasir/metode bayar (#45:7800), logo upload/SIA-SIPA, backup (#45:7364/7582).
+
+Pemeriksaan: backend 97 passed / 506 assertions + verifikasi curl mandiri (gating role, toggle-active, login nonaktif). Frontend tsc -b 0, build sukses, oxlint 0/0 (53 file), smoke 5 route 200, alur nyata (user uji.f5b dibuat → nonaktif).
+
+#### M8 — Retur pembelian ✅ selesai 2026-10-02
+
+Backend: migration purchase_returns + purchase_return_items (nomor RTN-{ymd}-{seq4}, prefix hardcoded tidak masuk settings — dicatat), PurchaseReturnService (batas returnable per receipt item 422 terstruktur + rollback, deduct type return_out ke batch asal), detail PO memuat returned/returnable per receipt item. 106 test hijau.
+
+Frontend: modal retur satu item dari detail PO (qty default sisa, validasi client, 422 per item), sub-nav pill Daftar PO | Retur Pembelian, halaman daftar retur. tsc -b 0, oxlint 0/0 (56 file), smoke 3 route 200, alur nyata RTN-20261002-0002.
+
+#### M9 — Impor XLSX obat + stok ✅ selesai 2026-10-02 (scope brief selesai)
+
+Backend: GET /api/medicines/import/template (XLSX 9 kolom + contoh), POST /api/medicines/import — semantic terdokumentasi: impor = penyesuaian stok ke angka fisik di file (opname-like), upsert obat by kode, kategori/satuan match by nama (auto-create), batch find-or-create dengan guard, delta → movement adjustment reason "Impor XLSX". Validasi dua fase all-or-nothing (422 per baris, rollback total). 112 test hijau.
+
+Frontend: modal Impor di Persediaan (unduh template blob, input file ≤2MB, ringkasan hijau / error per baris danger). tsc -b 0, oxlint 0/0 (57 file), smoke 200, alur nyata: template 200 + impor 1 obat sukses + non-xlsx 422.
+
+#### Hardening — code review + perbaikan ✅ selesai 2026-10-03
+
+Review independen penuh (4 reviewer paralel per domain + verifikasi langsung) menemukan 3 critical + 9 major. Diperbaikan semua dengan regression test (122 passed / 634 assertions):
+- C1 opname confirm pakai saldo live (bukan snapshot basi) — tolak 422 bila stok bergerak sejak snapshot.
+- C2/C3 sanitasi formula injection CSV (RFC-4180 + prefix ') dan XLSX (TYPE_STRING eksplisit).
+- M1 impor XLSX owner-only; M2 login throttle 5/menit; M6 Money negatif ("-1.50"); M3/M4/M5 lock + re-check status dalam transaksi (opname/retur jual/retur beli); M7 HPP di-snapshot ke sale_items.cost_price saat jual — laba rugi historis tahan perubahan harga beli batch.
+- Frontend: loop reload 401 diperbaiki (clearAuthStorage + event logout paksa, semua jalur fetch konsisten), deskripsi obat preload saat edit, format sen 2 digit, tanggal lokal (bukan UTC).
+- DemoSeeder: dataset demo sidang koheren (10 obat, penjualan 7 hari, void, retur jual/beli, opname, 2 PO) — dashboard hidup, profit-loss realistis, reconcile exit 0. Cara pakai di docblock.
+
+Pemeriksaan pasca-fix: 122 passed, reconcile OK 25 batch, profit-loss demo 758000/524350/233650, smoke 200.
+
 ## Pemeriksaan yang dijalankan
 
 - 2026-09-30: audit repo/Git/Docker/dependency (manual, lihat "Keadaan awal").
@@ -140,6 +177,11 @@ Pemeriksaan: tsc 0, build sukses, oxlint 0/0 (45 file), smoke 3 route 200, alur 
 - 2026-10-01 F2 frontend: tsc 0, build sukses, oxlint 0/0 (28 file), smoke route 200, sale via proxy berhasil (TRX-20261001-0006).
 - 2026-10-01 F3 frontend: tsc 0, build sukses, oxlint 0/0 (38 file), smoke 5 route 200, export CSV via proxy 200. Dep baru: recharts.
 - 2026-10-02 F4 frontend: tsc 0, build sukses, oxlint 0/0 (45 file), smoke 3 route 200, alur nyata PO via proxy (PO-20261002-0001).
+- 2026-10-02 F6 frontend: tsc -b 0, build sukses, oxlint 0/0 (50 file), smoke 3 route 200, alur nyata opname (OPN-20261002-0002 confirmed). Infra: backend/Dockerfile + gd (ext-gd untuk PhpSpreadsheet), image di-rebuild.
+- 2026-10-02 F5: backend 97 passed / 506 assertions + curl mandiri (settings gating, toggle-active, login nonaktif 403); frontend tsc -b 0, oxlint 0/0 (53 file), smoke 5 route 200.
+- 2026-10-02 M8: backend 106 passed / 558 assertions; frontend tsc -b 0, oxlint 0/0 (56 file), smoke 3 route 200, alur nyata RTN-20261002-0002.
+- 2026-10-02 M9: backend 112 passed / 596 assertions; frontend tsc -b 0, oxlint 0/0 (57 file), smoke 200, impor nyata 1 obat sukses + non-xlsx 422.
+- 2026-10-03 Hardening: code review penuh (3 critical + 9 major) semua diperbaiki + 10 regression test — 122 passed / 634 assertions; DemoSeeder data sidang; reconcile OK; smoke 200.
 - 2026-10-01 M4: `php artisan test` 57 passed / 255 assertions. API test black-box 11/12 lalu defect guard batch (duplikat antar obat lolos) diperbaiki via BatchService terpusat + 2 regression; artefak data dev dibersihkan.
 - 2026-10-01 M5: `php artisan test` 69 passed / 334 assertions. API test black-box 12/12 sesuai; minor reference.number adjustment diisi ADJ-{id}.
 - 2026-10-01 M6: `php artisan test` 78 passed / 398 assertions. API test black-box 9/9 sesuai, rekonsiliasi manual eksak (omzet/pembelian/COGS/nilai stok). Package baru: phpoffice/phpspreadsheet v5.10.

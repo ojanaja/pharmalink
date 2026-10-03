@@ -112,12 +112,23 @@ class StockMovementController extends Controller
                 ->get()
                 ->mapWithKeys(fn (\App\Models\SaleReturnItem $item) => [$item->id => $item->saleReturn?->return_number]);
 
-        $movements->each(function (StockMovement $movement) use ($receiptNumbers, $saleNumbers, $opnameNumbers, $returnNumbers) {
+        $purchaseReturnItemIds = $movements->where('reference_type', 'PurchaseReturnItem')->pluck('reference_id');
+
+        $purchaseReturnNumbers = $purchaseReturnItemIds->isEmpty()
+            ? collect()
+            : \App\Models\PurchaseReturnItem::query()
+                ->whereIn('id', $purchaseReturnItemIds)
+                ->with('purchaseReturn:id,return_number')
+                ->get()
+                ->mapWithKeys(fn (\App\Models\PurchaseReturnItem $item) => [$item->id => $item->purchaseReturn?->return_number]);
+
+        $movements->each(function (StockMovement $movement) use ($receiptNumbers, $saleNumbers, $opnameNumbers, $returnNumbers, $purchaseReturnNumbers) {
             $movement->reference_number = match ($movement->reference_type) {
                 'PurchaseReceiptItem' => $receiptNumbers->get($movement->reference_id),
                 'SaleItem' => $saleNumbers->get($movement->reference_id),
                 'StockOpname' => $opnameNumbers->get($movement->reference_id),
                 'SaleReturnItem' => $returnNumbers->get($movement->reference_id),
+                'PurchaseReturnItem' => $purchaseReturnNumbers->get($movement->reference_id),
                 'StockAdjustment' => "ADJ-{$movement->reference_id}",
                 default => null,
             };

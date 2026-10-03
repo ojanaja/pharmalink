@@ -37,7 +37,8 @@ export function MedicineFormModal({ open, medicine, onClose, onSaved }: Medicine
       unit_id: medicine?.unit ? String(medicine.unit.id) : '',
       sale_price: medicine ? String(Number(medicine.sale_price)) : '',
       min_stock: medicine ? String(medicine.min_stock) : '',
-      description: '',
+      // Deskripsi wajib dimuat ulang saat edit agar tidak tertimpa null (kehilangan data).
+      description: medicine?.description ?? '',
     })
     setInitialized(true)
     setError(null)
@@ -161,7 +162,12 @@ export function MedicineFormModal({ open, medicine, onClose, onSaved }: Medicine
           </Field>
         </div>
         <Field label="Deskripsi (opsional)">
-          <Input value={form.description} onChange={(e) => setField('description', e.target.value)} />
+          <textarea
+            value={form.description}
+            onChange={(e) => setField('description', e.target.value)}
+            rows={2}
+            className="w-full rounded-lg border border-input-border bg-surface px-3 py-2 text-sm text-ink outline-none transition-colors placeholder:text-placeholder focus:border-primary disabled:bg-neutral-bg disabled:opacity-60"
+          />
         </Field>
         {error && (
           <div role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger-ink">

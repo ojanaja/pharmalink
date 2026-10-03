@@ -1,5 +1,5 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
+import { PackagePlus, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
@@ -10,6 +10,7 @@ import { api } from '../../lib/api'
 import { formatDateId, formatRupiah } from '../../lib/format'
 import { poStatusLabel } from '../../lib/medicine'
 import type { LaravelPaginated, PurchaseOrderListItem, Supplier } from '../../lib/types'
+import { ManualReceiptModal } from './ManualReceiptModal'
 import { PurchaseOrderFormModal } from './PurchaseOrderFormModal'
 
 const STATUS_OPTIONS = [
@@ -25,6 +26,8 @@ export function PurchasesPage() {
   const [status, setStatus] = useState('')
   const [supplierId, setSupplierId] = useState('')
   const [formOpen, setFormOpen] = useState(false)
+  const [manualReceiptOpen, setManualReceiptOpen] = useState(false)
+  const queryClient = useQueryClient()
 
   const { data: suppliers } = useQuery({
     queryKey: ['suppliers'],
@@ -51,9 +54,14 @@ export function PurchasesPage() {
             Kelola purchase order, pantau penerimaan, dan jaga alur stok tetap terlacak.
           </p>
         </div>
-        <Button icon={<Plus size={15} />} onClick={() => setFormOpen(true)}>
-          Buat pembelian
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" icon={<PackagePlus size={15} />} onClick={() => setManualReceiptOpen(true)}>
+            Penerimaan Barang
+          </Button>
+          <Button icon={<Plus size={15} />} onClick={() => setFormOpen(true)}>
+            Buat pembelian
+          </Button>
+        </div>
       </div>
 
       {/* Alur persediaan — stepper 3 langkah per Figma #50:823 */}
@@ -207,6 +215,16 @@ export function PurchasesPage() {
         onCreated={() => {
           setFormOpen(false)
           refetch()
+        }}
+      />
+
+      <ManualReceiptModal
+        open={manualReceiptOpen}
+        onClose={() => {
+          setManualReceiptOpen(false)
+          // Penerimaan manual menambah stok — data dashboard/persediaan perlu disegarkan.
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+          queryClient.invalidateQueries({ queryKey: ['medicines'] })
         }}
       />
     </div>

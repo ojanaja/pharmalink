@@ -305,23 +305,23 @@ class ReportService
             ->whereBetween('sold_at', $range)
             ->sum('total'));
 
+        // HPP dari snapshot sale_items.cost_price (harga beli batch SAAT JUAL),
+        // bukan purchase_price batch saat ini — M7.
         $items = SaleItem::query()
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
-            ->leftJoin('batches', 'batches.id', '=', 'sale_items.batch_id')
             ->where('sales.status', SaleStatus::Completed)
             ->whereBetween('sales.sold_at', $range)
-            ->get(['sale_items.quantity', 'batches.purchase_price']);
+            ->get(['sale_items.quantity', 'sale_items.cost_price']);
 
         $cogsCents = 0;
         $withoutCost = 0;
 
         foreach ($items as $item) {
-            if ($item->purchase_price === null) {
+            if ($item->cost_price === null) {
                 $withoutCost += $item->quantity;
                 continue;
             }
-            // Kolom join tanpa cast model; fromSum menormalkan int/float/string.
-            $cogsCents += $item->quantity * Money::fromSum($item->purchase_price);
+            $cogsCents += $item->quantity * Money::fromSum($item->cost_price);
         }
 
         return [

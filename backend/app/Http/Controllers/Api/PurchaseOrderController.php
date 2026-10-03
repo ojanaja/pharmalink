@@ -67,18 +67,38 @@ class PurchaseOrderController extends Controller
     }
 
     /**
-     * Detail PO: items + riwayat penerimaan.
+     * Detail PO: items + riwayat penerimaan + batas retur per receipt item.
      */
     public function show(PurchaseOrder $purchaseOrder): PurchaseOrderResource
     {
-        return new PurchaseOrderResource($purchaseOrder->load([
+        $purchaseOrder->load([
             'supplier:id,name',
             'user:id,name',
             'items.medicine:id,code,name',
             'receipts' => fn ($q) => $q->orderByDesc('received_at'),
             'receipts.items.medicine:id,code,name',
             'receipts.items.batch:id,batch_number',
-        ]));
+        ]);
+
+        // Agregat retur pembelian per receipt item (untuk membatasi input retur di UI).
+        $receiptItemIds = $purchaseOrder->receipts->flatMap->items->pluck('id')->filter();
+
+        $returned = $receiptItemIds->isEmpty()
+            ? collect()
+            : \App\Models\PurchaseReturnItem::query()
+                ->whereIn('purchase_receipt_item_id', $receiptItemIds)
+                ->selectRaw('purchase_receipt_item_id, SUM(quantity) as qty')
+                ->groupBy('purchase_receipt_item_id')
+                ->pluck('qty', 'purchase_receipt_item_id');
+
+        foreach ($purchaseOrder->receipts as $receipt) {
+            foreach ($receipt->items as $item) {
+                $item->returned_quantity = (int) ($returned[$item->id] ?? 0);
+                $item->returnable_quantity = $item->quantity - $item->returned_quantity;
+            }
+        }
+
+        return new PurchaseOrderResource($purchaseOrder);
     }
 
     /**

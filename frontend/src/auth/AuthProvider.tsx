@@ -1,10 +1,8 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api, setToken } from '../lib/api'
+import { api, onForcedLogout, setToken, USER_KEY } from '../lib/api'
 import type { AuthState, AuthUser } from './AuthContext'
 import { AuthContext } from './AuthContext'
-
-const USER_KEY = 'pharmalink_user'
 
 function readStoredUser(): AuthUser | null {
   try {
@@ -39,6 +37,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     window.location.assign('/login')
   }, [])
+
+  // 401 dari api client membersihkan storage + memancar event — state ikut direset agar tidak loop reload.
+  useEffect(() => onForcedLogout(() => setUser(null)), [])
 
   const value = useMemo<AuthState>(() => ({ user, login, logout }), [user, login, logout])
 

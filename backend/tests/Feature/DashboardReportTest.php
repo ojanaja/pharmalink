@@ -89,6 +89,7 @@ class DashboardReportTest extends TestCase
             $sale->items()->create([
                 'medicine_id' => $medicine->id, 'batch_id' => null, 'quantity' => $qty,
                 'unit_price' => $price, 'subtotal' => sprintf('%d.%02d', intdiv($line, 100), $line % 100),
+                'cost_price' => '1800.00',
             ]);
         }
 
@@ -228,10 +229,10 @@ class DashboardReportTest extends TestCase
             ->json('data');
 
         $this->assertSame('28000.00', $data['sales']); // seed hari ini 15000 + 2x5000 + 3000
-        $this->assertSame('3600.00', $data['cogs']);   // 2 x 1800; paracetamol tanpa HPP
-        $this->assertSame('24400.00', $data['gross_profit']);
-        // 3 item seed (batch null) + 1 paracetamol terjual tanpa harga beli batch.
-        $this->assertSame(4, $data['items_without_cost']);
+        $this->assertSame('9000.00', $data['cogs']);   // 5 item Cetirizine terjual x 1800 (3 seed + 2 baru)
+        $this->assertSame('19000.00', $data['gross_profit']);
+        // Hanya paracetamol terjual tanpa harga beli batch (seed sale punya cost_price 1800).
+        $this->assertSame(1, $data['items_without_cost']);
     }
 
     public function test_ekspor_csv_benar(): void
