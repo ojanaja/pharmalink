@@ -1,4 +1,4 @@
-import { Cross } from 'lucide-react'
+import { Cross, LogOut } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../auth/useAuth'
 import { NAV_ITEMS } from './nav'
@@ -13,10 +13,10 @@ function initials(name: string): string {
 }
 
 export function Sidebar() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
 
   return (
-    <aside className="flex h-screen w-60 shrink-0 flex-col bg-sidebar">
+    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col bg-sidebar">
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-4 pb-4 pt-5">
         <span className="flex size-9 items-center justify-center rounded-[10px] bg-primary">
@@ -53,10 +53,19 @@ export function Sidebar() {
             <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[#D9F3EC] text-[13px] font-bold text-[#075A4D]">
               {initials(user.name)}
             </span>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold text-white">{user.name}</p>
               <p className="truncate text-xs capitalize text-[#9CB3AE]">{user.role}</p>
             </div>
+            <button
+              type="button"
+              onClick={logout}
+              aria-label="Keluar"
+              title="Keluar"
+              className="shrink-0 rounded-lg p-1.5 text-[#9CB3AE] transition-colors hover:bg-[rgba(255,255,255,0.09)] hover:text-white"
+            >
+              <LogOut size={16} aria-hidden="true" />
+            </button>
           </div>
         </div>
       )}

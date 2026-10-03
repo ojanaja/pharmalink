@@ -13,9 +13,19 @@ PHP, Composer, Node.js, dan MySQL lokal tidak wajib; service berjalan di contain
 1. Dari root repo, jalankan `make up` (atau `docker compose up --build`).
 2. Compose menyalin `backend/.env.example` menjadi `.env` pada first run, membuat app key, memasang dependency Composer dan npm, menjalankan migrasi standar, lalu menjalankan MySQL, Laravel, dan Vite.
 3. Buka `http://localhost:5173` untuk frontend dan `http://localhost:8000` untuk backend.
-4. Migrasi standar Laravel berjalan otomatis saat backend start. Untuk menjalankannya lagi: `docker compose exec backend php artisan migrate`.
+4. Migrasi standar Laravel berjalan otomatis saat backend start, diikuti seed dasar (akun owner/apoteker, kategori, satuan, 5 obat dengan batch, 1 supplier). Untuk menjalankannya lagi: `docker compose exec backend php artisan migrate`.
 
-> Catatan: DB masih kosong untuk domain apotek. Belum ada migration/schema bisnis, seed data, maupun akun demo.
+### Data demo sidang
+
+Seed dasar cukup untuk cek instalasi. Untuk demo yang koheren (dashboard 7 hari hidup, skenario void/retur/opname/PO, batch kedaluwarsa bertingkat):
+
+```bash
+docker compose exec backend php artisan migrate:fresh --seed --class=DemoSeeder
+```
+
+Akun login (password semua: `password`): owner `owner@pharmalink.test`, apoteker `apoteker@pharmalink.test`. Login dibatasi 5 percobaan per menit per IP.
+
+Pemeriksaan kesehatan stok: `docker compose exec backend php artisan stock:reconcile` (exit 0 = snapshot cocok dengan ledger). Test suite: `docker compose exec backend php artisan test`.
 
 ## Perintah harian
 
@@ -48,7 +58,7 @@ Data persisten ada di Docker volume `mysql_data`. `make down` menjaga volume. `d
 
 Backend Laravel dipisah dari frontend. Vite meneruskan request `/api/*` ke backend. Atur `VITE_API_PROXY_TARGET` untuk target lain; Compose sudah mengarahkannya ke service backend.
 
-Endpoint awal Laravel tersedia setelah scaffold API (lihat `routes/api.php`). Tidak ada endpoint bisnis Pharmalink yang dibuat pada tahap setup ini.
+Semua endpoint bisnis tersedia di bawah `/api/*` (auth, obat/batch/mutasi stok, penjualan + void/retur, purchase order + penerimaan + retur beli, koreksi + stock opname, dashboard, laporan + ekspor/impor, pengaturan, user). Otorisasi Sanctum + role owner/apoteker; ringkasannya ada di `docs/IMPLEMENTATION_PLAN.md`.
 
 ## Troubleshooting
 

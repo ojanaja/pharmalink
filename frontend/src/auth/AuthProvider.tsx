@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api, onForcedLogout, setToken, USER_KEY } from '../lib/api'
+import { api, getToken, onForcedLogout, setToken, USER_KEY } from '../lib/api'
 import type { AuthState, AuthUser } from './AuthContext'
 import { AuthContext } from './AuthContext'
 
@@ -32,6 +32,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
+    // Cabut token di server; kegagalan jaringan tetap lanjut logout lokal.
+    void fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken() ?? ''}` },
+    }).catch(() => {})
     setToken(null)
     localStorage.removeItem(USER_KEY)
     setUser(null)

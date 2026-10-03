@@ -1,4 +1,5 @@
-import { Check, History, MessageCircle, PackageCheck, Printer } from 'lucide-react'
+import { Check, History, PackageCheck } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { formatDateTimeId, formatRupiah } from '../../lib/format'
@@ -79,9 +80,6 @@ export function SaleSuccessView({ sale, cashierName, cart, onReset }: SaleSucces
           </div>
 
           <div className="flex flex-col gap-2.5 px-6 py-6">
-            <Button variant="secondary" icon={<Printer size={16} />}>
-              Cetak Struk
-            </Button>
             <Button size="lg" icon={<Check size={16} />} onClick={onReset}>
               Transaksi Baru
             </Button>
@@ -133,20 +131,18 @@ export function SaleSuccessView({ sale, cashierName, cart, onReset }: SaleSucces
 
           <div className="flex flex-col gap-3 rounded-card border border-line bg-surface p-5">
             <p className="text-base font-bold text-ink">Langkah berikutnya</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-2 rounded-lg bg-primary-soft p-4">
-                <MessageCircle size={20} className="text-primary" aria-hidden="true" />
-                <p className="text-[13px] font-semibold text-ink">Kirim struk digital</p>
+            <Link
+              to="/penjualan/riwayat"
+              className="flex items-center gap-3 rounded-lg bg-table-header p-4 transition-colors hover:bg-primary-soft"
+            >
+              <History size={20} className="shrink-0 text-primary" aria-hidden="true" />
+              <div>
+                <p className="text-[13px] font-semibold text-ink">Lihat riwayat penjualan</p>
                 <p className="text-[11px] text-ink-secondary">
-                  Bagikan melalui WhatsApp pelanggan.
+                  Buka detail transaksi kapan saja.
                 </p>
               </div>
-              <div className="flex flex-col gap-2 rounded-lg bg-table-header p-4">
-                <History size={20} className="text-primary" aria-hidden="true" />
-                <p className="text-[13px] font-semibold text-ink">Lihat riwayat</p>
-                <p className="text-[11px] text-ink-secondary">Buka detail transaksi kapan saja.</p>
-              </div>
-            </div>
+            </Link>
           </div>
         </div>
       </div>

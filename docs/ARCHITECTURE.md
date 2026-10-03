@@ -22,10 +22,17 @@ docker-compose.yml
 Makefile
 ```
 
-## Batas saat ini
+## Keadaan saat ini
 
-Ini baru fondasi project. Belum ada layar dashboard Pharmalink, modul obat/supplier, transaksi, pembelian, laporan, role bisnis owner/apoteker, atau skema domain apotek. Sanctum hanya menjadi fondasi auth API; konfigurasi permission/role bisnis diputuskan saat pengembangan fitur.
+Fondasi scaffold telah dikembangkan menjadi aplikasi lengkap per brief (rincian milestone, keputusan, dan pemeriksaan ada di `docs/IMPLEMENTATION_PLAN.md`):
 
-## Arahan domain untuk tahap berikutnya
+- **Backend:** ~28 migration, 17 model, 12 service, 16 controller. Auth Sanctum + role `owner`/`apoteker` via Policy. Modul: master data (obat/kategori/satuan/supplier), penerimaan barang manual dan dari purchase order, penjualan FEFO dengan snapshot harga + HPP, void dan retur penjualan, retur pembelian, koreksi stok, stock opname, dashboard, 5 laporan dengan ekspor CSV/XLSX, impor XLSX, pengaturan apotek, manajemen user. 122 feature test hijau.
+- **Frontend:** React + Tailwind v4 dengan token dari design system Figma (shell "Apotek Sehat Sentosa"). Router + auth guard, 7 menu lengkap: Dashboard, Penjualan (kasir + riwayat + retur/void), Persediaan (+ detail obat, koreksi, impor), Pembelian (PO + penerimaan + retur), Master Data, Laporan (5 tab + export), Pengaturan (profil, transaksi, user, matriks akses).
 
-Rancang model data sebelum membuat migration bisnis. Domain kemungkinan meliputi apotek, pengguna dan role, obat/satuan/kategori, supplier, batch dan tanggal kedaluwarsa, mutasi stok, penjualan dan item penjualan, purchase order dan item pembelian, serta stock opname. Catat keputusan tentang nomor transaksi, pembatalan/retur, audit perubahan stok, dan aturan harga di dokumen kebutuhan sebelum implementasi.
+## Prinsip domain yang dijaga
+
+- **Ledger stok append-only** (`stock_movements` + `balance_after`) adalah sumber kebenaran; `batches.quantity_on_hand` adalah snapshot yang ditulis atomik dalam transaksi yang sama. Satu pintu mutasi: `StockService`. Rekonsiliasi: `php artisan stock:reconcile`.
+- **FEFO** untuk pemilihan batch penjualan; nomor batch adalah identitas fisik (satu nomor tidak boleh dipakai dua obat atau dua tanggal kedaluwarsa — `BatchService`).
+- **Uang** DECIMAL(15,2), aritmetika sen-integer (`App\Support\Money`), harga di-snapshot di detail transaksi (harga jual dan HPP) agar historis tak berubah.
+- **Setiap transaksi stok** dalam `DB::transaction` dengan `lockForUpdate` pada baris yang disentuh; nomor dokumen `{prefix}-{ymd}-{seq4}` dengan unique constraint.
+- **Zona waktu** Asia/Jakarta di config aplikasi.

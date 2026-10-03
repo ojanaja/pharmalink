@@ -182,6 +182,7 @@ Pemeriksaan pasca-fix: 122 passed, reconcile OK 25 batch, profit-loss demo 75800
 - 2026-10-02 M8: backend 106 passed / 558 assertions; frontend tsc -b 0, oxlint 0/0 (56 file), smoke 3 route 200, alur nyata RTN-20261002-0002.
 - 2026-10-02 M9: backend 112 passed / 596 assertions; frontend tsc -b 0, oxlint 0/0 (57 file), smoke 200, impor nyata 1 obat sukses + non-xlsx 422.
 - 2026-10-03 Hardening: code review penuh (3 critical + 9 major) semua diperbaiki + 10 regression test — 122 passed / 634 assertions; DemoSeeder data sidang; reconcile OK; smoke 200.
+- 2026-10-03 Delivery docs: README, docs/SETUP.md, docs/ARCHITECTURE.md disinkronkan dengan keadaan aktual (fitur lengkap, DemoSeeder, akun demo, reconcile); sidebar sticky + tombol logout ditambahkan; tombol dummy dihapus (bell, avatar topbar, Cetak Struk).
 - 2026-10-01 M4: `php artisan test` 57 passed / 255 assertions. API test black-box 11/12 lalu defect guard batch (duplikat antar obat lolos) diperbaiki via BatchService terpusat + 2 regression; artefak data dev dibersihkan.
 - 2026-10-01 M5: `php artisan test` 69 passed / 334 assertions. API test black-box 12/12 sesuai; minor reference.number adjustment diisi ADJ-{id}.
 - 2026-10-01 M6: `php artisan test` 78 passed / 398 assertions. API test black-box 9/9 sesuai, rekonsiliasi manual eksak (omzet/pembelian/COGS/nilai stok). Package baru: phpoffice/phpspreadsheet v5.10.
