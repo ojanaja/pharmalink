@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
 import { ApiError, api } from '../../lib/api'
-import { todayLocal } from '../../lib/format'
+import { autoBatchNumber, todayLocal } from '../../lib/format'
 import type { PoItem } from '../../lib/types'
 
 // Tanggal hari ini (Y-m, waktu lokal) untuk validasi client expiry_date; dihitung sekali saat modul dimuat.
@@ -51,12 +51,13 @@ export function ReceiptFormModal({ open, poId, items, onClose, onCreated }: Rece
         .filter((item) => item.received_quantity !== null)
         .map((item) => {
           const remaining = item.quantity - (item.received_quantity ?? 0)
+          const medicineName = item.medicine?.name ?? `Item #${item.id}`
           return {
             po_item_id: item.id,
-            medicineName: item.medicine?.name ?? `Item #${item.id}`,
+            medicineName,
             unitName: item.medicine?.unit?.name ?? '',
             quantity: remaining,
-            batch_number: '',
+            batch_number: autoBatchNumber(medicineName, TODAY),
             expiry_date: '',
             unit_cost: item.unit_price,
           }
@@ -191,14 +192,28 @@ export function ReceiptFormModal({ open, poId, items, onClose, onCreated }: Rece
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] text-ink-secondary">No. batch *</span>
-                  <Input
-                    value={row.batch_number}
-                    onChange={(event) =>
-                      updateRow(row.po_item_id, { batch_number: event.target.value })
-                    }
-                    placeholder="BTH-…"
-                    aria-label={`Nomor batch ${row.medicineName}`}
-                  />
+                  <div className="flex gap-1">
+                    <Input
+                      value={row.batch_number}
+                      onChange={(event) =>
+                        updateRow(row.po_item_id, { batch_number: event.target.value })
+                      }
+                      placeholder="BTH-…"
+                      aria-label={`Nomor batch ${row.medicineName}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateRow(row.po_item_id, {
+                          batch_number: autoBatchNumber(row.medicineName, TODAY),
+                        })
+                      }
+                      title="Buat nomor batch otomatis (B-NAMA OBAT-TANGGAL)"
+                      className="shrink-0 rounded-lg border border-line px-2 text-[11px] font-semibold text-ink-secondary transition-colors hover:border-primary hover:text-primary"
+                    >
+                      Auto
+                    </button>
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] text-ink-secondary">Expired *</span>

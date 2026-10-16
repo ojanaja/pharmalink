@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/Button'
 import { Field, Input, Select } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
 import { ApiError, api } from '../../lib/api'
-import { todayLocal } from '../../lib/format'
+import { autoBatchNumber, todayLocal } from '../../lib/format'
 import type { LaravelPaginated, Medicine, Supplier } from '../../lib/types'
 
 // Tanggal hari ini (Y-m-d, waktu lokal) untuk batas minimal expiry_date.
@@ -203,6 +203,20 @@ export function ManualReceiptModal({ open, onClose }: ManualReceiptModalProps) {
                     placeholder="No. batch *"
                     aria-label={`Nomor batch item ${index + 1}`}
                   />
+                  <button
+                    type="button"
+                    disabled={item.medicine_id === null}
+                    onClick={() => {
+                      const medicine = medicines?.data.find((m) => m.id === item.medicine_id)
+                      updateItem(index, {
+                        batch_number: autoBatchNumber(medicine?.name ?? '', TODAY),
+                      })
+                    }}
+                    title="Buat nomor batch otomatis (B-NAMA OBAT-TANGGAL)"
+                    className="shrink-0 self-center rounded-lg border border-line px-2 py-2 text-[11px] font-semibold text-ink-secondary transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Auto
+                  </button>
                   <Input
                     type="date"
                     min={TODAY}
