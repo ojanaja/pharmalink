@@ -95,4 +95,54 @@ class MedicineApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.stock_total', 20); // konsisten dengan index (Σ batches)
     }
+
+    public function test_export_obat_xlsx_format_master_data(): void
+    {
+        Medicine::create($this->payload());
+        Medicine::create([
+            'code' => 'MED-002',
+            'name' => 'Amoxicillin 500mg',
+            'category_id' => Category::create(['name' => 'Obat Keras'])->id,
+            'unit_id' => Unit::create(['name' => 'Kapsul'])->id,
+            'sale_price' => '12500.00',
+            'min_stock' => 30,
+        ]);
+
+        $response = $this->withToken($this->owner->createToken('api')->plainTextToken)
+            ->getJson('/api/medicines/export')
+            ->assertOk();
+
+        $this->assertStringStartsWith(
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            (string) $response->headers->get('Content-Type')
+        );
+
+        $path = tempnam(sys_get_temp_dir(), 'xlsx');
+        file_put_contents($path, $response->getContent());
+        $sheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($path)->getActiveSheet();
+
+        // Judul sheet + header persis template "Master Data Obat".
+        $this->assertSame('Master Data Obat', $sheet->getTitle());
+        $this->assertSame(['Kode', 'Nama Obat', 'Satuan', 'Harga jual', 'Minimum stok'],
+            array_map(fn ($c) => $sheet->getCell("{$c}1")->getValue(), range('A', 'E')));
+
+        // Dua obat, urut by kode, nilai sesuai.
+        $this->assertSame('MED-001', $sheet->getCell('A2')->getValue());
+        $this->assertSame('Paracetamol 500mg', $sheet->getCell('B2')->getValue());
+        $this->assertSame('Strip', $sheet->getCell('C2')->getValue());
+        $this->assertSame(3000.0, $sheet->getCell('D2')->getValue());
+        $this->assertSame(50, $sheet->getCell('E2')->getValue());
+        $this->assertSame('MED-002', $sheet->getCell('A3')->getValue());
+        $this->assertSame(12500.0, $sheet->getCell('D3')->getValue());
+        $this->assertNull($sheet->getCell('A4')->getValue()); // tidak ada baris contoh
+    }
+
+    public function test_export_obat_apoteker_boleh(): void
+    {
+        $apoteker = User::factory()->create(['role' => Role::Apoteker]);
+
+        $this->withToken($apoteker->createToken('api')->plainTextToken)
+            ->getJson('/api/medicines/export')
+            ->assertOk();
+    }
 }

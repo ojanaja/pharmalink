@@ -30,6 +30,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/user', fn (Request $request) => new UserResource($request->user()));
 
+    Route::get('medicines/export', [MedicineController::class, 'export']);
     Route::get('medicines/import/template', [MedicineImportController::class, 'template'])->middleware('role:owner');
     Route::post('medicines/import', [MedicineImportController::class, 'import'])->middleware('role:owner');
     Route::apiResource('medicines', MedicineController::class);

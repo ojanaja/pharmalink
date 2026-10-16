@@ -13,6 +13,7 @@ import { formatRupiah } from '../../lib/format'
 import { sortRows, useSort } from '../../lib/sort'
 import type { Category, LaravelPaginated, Medicine, Supplier, Unit } from '../../lib/types'
 import { ImportMedicinesModal } from '../MedicinesImportModal'
+import { ExportButton } from '../reports/ExportButton'
 import { MedicineFormModal } from './MedicineFormModal'
 import { SupplierFormModal } from './SupplierFormModal'
 
@@ -106,6 +107,7 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
           <h3 className="text-[15px] font-bold text-ink">Daftar Obat</h3>
           {isOwner && (
             <div className="flex gap-2">
+              <ExportButton url="/api/medicines/export" label="Export" />
               <Button variant="secondary" size="sm" icon={<Upload size={14} />} onClick={() => setImportOpen(true)}>
                 Impor
               </Button>

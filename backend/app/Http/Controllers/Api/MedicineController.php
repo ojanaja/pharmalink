@@ -39,6 +39,56 @@ class MedicineController extends Controller
         return MedicineResource::collection($medicines);
     }
 
+    /**
+     * Export seluruh obat (non-soft-deleted) ke XLSX — format persis sheet
+     * "Master Data Obat" template impor (data nyata, tanpa baris contoh).
+     * Angka ditulis numerik; teks selalu string (cegah formula injection).
+     */
+    public function export(): \Illuminate\Http\Response
+    {
+        $this->authorize('viewAny', Medicine::class);
+
+        $medicines = Medicine::query()
+            ->with('unit:id,name')
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'unit_id', 'sale_price', 'min_stock']);
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Master Data Obat');
+
+        $headers = ['Kode', 'Nama Obat', 'Satuan', 'Harga jual', 'Minimum stok'];
+        foreach ($headers as $i => $header) {
+            $sheet->setCellValueExplicit([$i + 1, 1], $header, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        }
+        $sheet->getStyle([1, 1, count($headers), 1])->getFont()->setBold(true);
+
+        $row = 2;
+        foreach ($medicines as $medicine) {
+            $sheet->setCellValueExplicit([1, $row], $medicine->code, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit([2, $row], $medicine->name, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit([3, $row], (string) $medicine->unit?->name, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit([4, $row], (float) $medicine->sale_price, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
+            $sheet->setCellValueExplicit([5, $row], (int) $medicine->min_stock, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
+            $row++;
+        }
+
+        foreach (range('A', 'E') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        $filename = 'data-obat-'.now()->format('Ymd').'.xlsx';
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        ob_start();
+        $writer->save('php://output');
+        $content = ob_get_clean();
+
+        return response($content, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+
     public function show(Medicine $medicine): MedicineResource
     {
         return new MedicineResource($medicine->load([
