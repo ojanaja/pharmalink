@@ -186,6 +186,7 @@ Pemeriksaan pasca-fix: 122 passed, reconcile OK 25 batch, profit-loss demo 75800
 - 2026-10-03 Sort + filter tabel: util useSort/sortRows/SortHeader; 17 tabel dapat sort (Persediaan, batch, kartu stok, riwayat penjualan, daftar/detail PO, retur beli, opname, master obat/supplier, users, 4 tabel laporan); filter kontekstual baru (status stok, tipe mutasi, status sale, role/status user). Client-side per halaman ter-load (paginasi per 15 tidak diubah — keterbatasan dicatat). tsc -b 0, oxlint 0/0 (59 file).
 - 2026-10-16 Batch review (11 temuan): export stok per batch + tanggal kedaluwarsa + tanggal cetak; export penjualan + section daftar transaksi (tanggal); export pembelian + section daftar penerimaan (tanggal); supplier detail + pivot obat & harga beli; satuan di semua tabel pembelian; search bar Persediaan; impor XLSX juga di Master Data (open balance); bug NaN total stok (akar: stock_total tidak dikirim show — fix backend + fallback frontend); crash StockOpnamePage (akar: summary tidak ada di index — fix backend + null-safe frontend). Backend 129 passed / 665 assertions; frontend tsc -b 0, oxlint 0/0 (59 file). Test laba-rugi diperbaiki jadi deterministik (rentang eksplisit, bukan subDays relatif).
 - 2026-10-16 Koreksi domain + bug: nomor batch tidak unik global (boleh sama antar obat — umum dalam satu kiriman supplier; ditolak hanya obat sama + nomor sama + expiry beda). Temuan samping: receipt manual tanpa unit_cost → 500; unit_cost kini wajib backend + UI. Harga beli PO juga wajib diisi UI (placeholder "Otomatis" dihapus). Backend 130 passed / 674 assertions; verifikasi live batch sama untuk 2 obat → 201.
+- 2026-10-16 Impor XLSX: tanggal kedaluwarsa berupa angka serial Excel (46598) kini dikonversi otomatis ke tanggal; pesan error per field diperjelas (bukan "Baris tidak valid" generik); angka berformat ribuan Excel dinormalisasi. Nomor batch penerimaan bisa auto-generate B-NAMAOBAT-TANGGAL (prefill PO + tombol Auto di kedua modal penerimaan). Tabel Persediaan: guard NaN + refetchOnWindowFocus (row phantom NaN ternyata cache browser). Backend 132 passed / 679 assertions.
 - 2026-10-01 M4: `php artisan test` 57 passed / 255 assertions. API test black-box 11/12 lalu defect guard batch (duplikat antar obat lolos) diperbaiki via BatchService terpusat + 2 regression; artefak data dev dibersihkan.
 - 2026-10-01 M5: `php artisan test` 69 passed / 334 assertions. API test black-box 12/12 sesuai; minor reference.number adjustment diisi ADJ-{id}.
 - 2026-10-01 M6: `php artisan test` 78 passed / 398 assertions. API test black-box 9/9 sesuai, rekonsiliasi manual eksak (omzet/pembelian/COGS/nilai stok). Package baru: phpoffice/phpspreadsheet v5.10.
@@ -202,7 +203,24 @@ Pemeriksaan pasca-fix: 122 passed, reconcile OK 25 batch, profit-loss demo 75800
 5. Pembayaran: tunai dulu; `payment_method` varchar tetap ada, multi-metode menyusul bila perlu.
 6. **4 role di layar User & Hak Akses** vs 2 role di brief — konfirmasi scope role.
 
-## Risiko
+## Artefak motion graphic — 2026-10-16
+
+### Revisi V2 — 30 detik
+
+- Arahan user: tempo lebih padat, scene lebih sederhana dan visual, layout bersih dengan teks di tengah, transisi intens tetapi smooth, musik lebih ngebeat, tambahan voice-over Indonesia.
+- Acceptance criteria: tepat 30 detik, 1080p60, delapan scene dengan teks singkat, musik 144 BPM dan narasi terdengar jelas, transisi serta layout diperiksa, MP4 versi lama tetap tersedia.
+- Implementasi: komposisi baru dengan objek kapsul, stok, batch, koneksi transaksi, alur ikon, grafik, dan brand; metadata/grid/tabel/paragraf versi lama dihapus dari film. Backup sumber V1 di `artifacts/pharmalink-motion/archive-v1/`.
+- Konektor HeyGen meminta autentikasi ulang saat pencarian voice; produksi VO dilanjutkan lewat TTS Indonesia terpisah tanpa mengubah koneksi akun.
+- Status: produksi; hasil verifikasi V2 dicatat setelah render.
+
+- Permintaan: film SaaS 60 detik bertema accountability, reliability, efficiency berdasarkan konteks frontend.
+- Milestone V1: tinjau bukti fitur dan susun arah kreatif; V2: komposisi + musik; V3: pemeriksaan layout/motion dan render MP4.
+- Acceptance criteria: durasi 60 detik, 1920×1080, tiga tema terbaca, audio instrumental, sumber dapat diedit, MP4 dapat diputar, tidak mengubah runtime produk.
+- Keputusan: gunakan film abstrak/tipografi/diagram, bukan UI baru. Konektor Figma menolak akses file; pekerjaan UI yang bergantung pada desain dihentikan.
+- Bukti pesan ditinjau dari frontend kasir, kartu stok, stock opname, dashboard, ekspor laporan serta SaleService. Tidak ada klaim metrik performa atau jaminan uptime.
+- Lokasi: `artifacts/pharmalink-motion/`. Selesai: MP4 H.264 1920×1080, 60 fps, 3.600 frame, tepat 60 detik; AAC stereo 48 kHz tepat 60 detik, 11.764.565 byte. Pemeriksaan strict pada 10 frame utama serta 5 frame tambahan lolos tanpa warning (159/159 pemeriksaan kontras); decode penuh FFmpeg exit 0 tanpa error. Frame hasil encode diperiksa visual. Sumber dan cara render ada di README artefak; tidak ada perubahan runtime produk oleh pekerjaan video.
+
+## Risiko produk
 
 - Konsistensi stok konkuren → `lockForUpdate` + satu `StockService` + unique constraint.
 - Drift snapshot vs ledger → command rekonsiliasi (M7) + primitif tunggal.

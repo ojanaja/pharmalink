@@ -14,6 +14,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date;
 
 /**
  * Impor XLSX obat + stok.
@@ -34,6 +35,13 @@ class MedicineImportService
         'Kode', 'Nama', 'Kategori', 'Satuan', 'Harga Jual',
         'Stok Minimum', 'Stok Fisik', 'Nomor Batch', 'Tanggal Kedaluwarsa',
     ];
+
+    // Batas serial tanggal Excel yang wajar (tahun 1932–2078).
+    private const EXCEL_SERIAL_MIN = 30000;
+
+    private const EXCEL_SERIAL_MAX = 80000;
+
+    private const MSG_TGL_INVALID = 'Tanggal kedaluwarsa tidak valid — isi tanggal (contoh 2027-01-31).';
 
     public function __construct(
         protected StockService $stock,
@@ -83,7 +91,7 @@ class MedicineImportService
     protected function readRows(UploadedFile $file): array
     {
         $sheet = IOFactory::load($file->getPathname())->getActiveSheet();
-        $data = $sheet->toArray(null, true, true, false);
+        $data = $sheet->toArray(null, true, false, false); // formatData=false: angka tetap numerik, tanggal = serial Excel
 
         array_shift($data); // header
 
@@ -112,11 +120,11 @@ class MedicineImportService
             $nama = $this->str($row[1] ?? null);
             $kategori = $this->str($row[2] ?? null);
             $satuan = $this->str($row[3] ?? null);
-            $harga = $row[4] ?? null;
-            $minStock = $row[5] ?? null;
-            $stokFisik = $row[6] ?? null;
+            $harga = $this->normalizeNumber($row[4] ?? null);
+            $minStock = $this->normalizeNumber($row[5] ?? null);
+            $stokFisik = $this->normalizeNumber($row[6] ?? null);
             $batchNumber = $this->str($row[7] ?? null);
-            $expiry = $this->str($row[8] ?? null);
+            $expiry = $this->normalizeExpiry($row[8] ?? null);
 
             if ($kode === '') {
                 $rowErrors[] = 'Kode wajib diisi.';
@@ -156,8 +164,8 @@ class MedicineImportService
                     $rowErrors[] = 'Nomor Batch wajib diisi bila Stok Fisik > 0.';
                 }
 
-                if ($expiry === '' || ! Carbon::hasFormat($expiry, 'Y-m-d')) {
-                    $rowErrors[] = 'Tanggal Kedaluwarsa wajib format YYYY-MM-DD bila Stok Fisik > 0.';
+                if ($expiry === null || ! Carbon::hasFormat($expiry, 'Y-m-d')) {
+                    $rowErrors[] = self::MSG_TGL_INVALID;
                 } elseif (Carbon::createFromFormat('Y-m-d', $expiry)->isBefore(today())) {
                     $rowErrors[] = 'Tanggal Kedaluwarsa tidak boleh tanggal lampau.';
                 }
@@ -165,7 +173,7 @@ class MedicineImportService
                 // Guard identitas batch per (obat, nomor batch), sama dengan penerimaan:
                 // nomor sama antar obat diizinkan; satu obat + nomor sama + expiry
                 // berbeda = error baris.
-                if ($batchNumber !== '' && $expiry !== '' && Carbon::hasFormat($expiry, 'Y-m-d') && $medicine !== null) {
+                if ($batchNumber !== '' && $expiry !== null && Carbon::hasFormat($expiry, 'Y-m-d') && $medicine !== null) {
                     $existing = Batch::query()
                         ->where('medicine_id', $medicine->id)
                         ->where('batch_number', $batchNumber)
@@ -234,7 +242,8 @@ class MedicineImportService
         $batch = $this->batches->findOrCreateForReceipt(
             $medicine->id,
             $this->str($row[7]),
-            $this->str($row[8]),
+            // Tanggal serial Excel dinormalkan sama seperti fase validasi.
+            $this->normalizeExpiry($row[8] ?? null) ?? $this->str($row[8] ?? null),
         );
 
         // Kunci batch saat baca saldo agar dua impor paralel tidak saling menimpa delta.
@@ -284,6 +293,38 @@ class MedicineImportService
     protected function str(mixed $cell): string
     {
         return $cell === null ? '' : trim((string) $cell);
+    }
+
+    /**
+     * Sel tanggal: angka serial Excel (dengan format ribuan/tanggal di Excel)
+     * dikonversi ke Y-m-d; string dipakai apa adanya. Null = kosong atau
+     * serial di luar rentang wajar — menjadi error baris yang jelas.
+     */
+    protected function normalizeExpiry(mixed $cell): ?string
+    {
+        if (is_int($cell) || is_float($cell)) {
+            if ($cell >= self::EXCEL_SERIAL_MIN && $cell <= self::EXCEL_SERIAL_MAX) {
+                return Date::excelToDateTimeObject($cell)->format('Y-m-d');
+            }
+
+            return null;
+        }
+
+        $s = $this->str($cell);
+
+        return $s === '' ? null : $s;
+    }
+
+    /**
+     * Sel angka: string dengan pemisah ribuan "15.000" dinormalkan jadi "15000".
+     */
+    protected function normalizeNumber(mixed $cell): mixed
+    {
+        if (is_string($cell) && preg_match('/^\d{1,3}(\.\d{3})+$/', $cell)) {
+            return str_replace('.', '', $cell);
+        }
+
+        return $cell;
     }
 
     protected function isInt(mixed $cell): bool

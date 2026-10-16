@@ -196,6 +196,41 @@ class MedicineImportTest extends TestCase
             ->assertJsonValidationErrors(['file']);
     }
 
+    public function test_impor_tanggal_serial_excel_dikonversi(): void
+    {
+        // Sel tanggal diisi user di Excel sebagai tanggal -> terbaca serial angka.
+        $serial = 46598; // hasil konversi dihitung via PhpSpreadsheet, bukan hardcode
+        $expected = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($serial)->format('Y-m-d');
+
+        $row = $this->validRow();
+        $row[8] = $serial; // Tanggal Kedaluwarsa sebagai angka serial
+
+        $file = $this->xlsxFile([$row]);
+
+        $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
+        $response->assertOk();
+
+        $batch = \App\Models\Batch::where('batch_number', 'BTH-IMP-001')->sole();
+        $this->assertSame($expected, $batch->expiry_date->toDateString());
+    }
+
+    public function test_impor_tanggal_serial_ngawur_422_pesan_jelas(): void
+    {
+        $row = $this->validRow();
+        $row[8] = 5; // di luar rentang serial wajar
+
+        $file = $this->xlsxFile([$row]);
+
+        $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
+        $response->assertUnprocessable();
+        $this->assertSame(
+            'Tanggal kedaluwarsa tidak valid — isi tanggal (contoh 2027-01-31).',
+            $response->json('errors.rows.0.errors.0'),
+        );
+
+        $this->assertSame(0, \App\Models\Batch::count());
+    }
+
     public function test_impor_tanpa_token_ditolak(): void
     {
         $file = $this->xlsxFile([$this->validRow()]);
