@@ -26,7 +26,8 @@ class SupplierController extends Controller
 
     public function show(Supplier $supplier): SupplierResource
     {
-        return new SupplierResource($supplier);
+        // Pivot purchase_price otomatis terbawa belongsToMany (withPivot).
+        return new SupplierResource($supplier->load('medicines:id,code,name'));
     }
 
     public function store(StoreSupplierRequest $request): JsonResponse

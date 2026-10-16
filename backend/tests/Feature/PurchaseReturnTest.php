@@ -230,6 +230,8 @@ class PurchaseReturnTest extends TestCase
         $receiptItem = $detail['receipts'][0]['items'][0];
         $this->assertSame(4, $receiptItem['returned_quantity']);
         $this->assertSame(6, $receiptItem['returnable_quantity']);
+        // Item penerimaan membawa satuan obat (eager load, tanpa N+1).
+        $this->assertSame('Strip', $receiptItem['medicine']['unit']['name']);
     }
 
     public function test_tanpa_token_ditolak(): void

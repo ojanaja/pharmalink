@@ -190,7 +190,10 @@ class StockOpnameTest extends TestCase
         $this->withToken($this->token())
             ->getJson('/api/stock-opnames?status=draft')
             ->assertOk()
-            ->assertJsonCount(1, 'data');
+            ->assertJsonCount(1, 'data')
+            // Ringkasan selisih tersedia juga di daftar (sama dengan show).
+            ->assertJsonPath('data.0.summary.total_items', 3)
+            ->assertJsonPath('data.0.summary.adjusted_items', 0);
 
         $this->withToken($this->token())->postJson("/api/stock-opnames/{$data['id']}/confirm")->assertOk();
 

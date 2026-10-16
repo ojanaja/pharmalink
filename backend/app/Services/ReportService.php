@@ -290,6 +290,81 @@ class ReportService
     }
 
     /**
+     * Stok per BATCH (untuk ekspor): hanya batch berstok, mentah —
+     * format tampilan (tanggal dd/mm/yyyy) di lapisan export.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function stockBatches(): array
+    {
+        return Batch::query()
+            ->with(['medicine:id,code,name,category_id,unit_id', 'medicine.category:id,name', 'medicine.unit:id,name'])
+            ->where('quantity_on_hand', '>', 0)
+            ->orderBy('medicine_id')
+            ->orderBy('expiry_date')
+            ->get()
+            ->map(fn (Batch $b) => [
+                'code' => $b->medicine->code,
+                'name' => $b->medicine->name,
+                'category' => $b->medicine->category?->name,
+                'unit' => $b->medicine->unit?->name,
+                'batch_number' => $b->batch_number,
+                'expiry_date' => $b->expiry_date?->toDateString(),
+                'quantity' => $b->quantity_on_hand,
+                'purchase_price' => $b->purchase_price,
+                'value_cents' => $b->quantity_on_hand * Money::fromSum($b->purchase_price),
+            ])
+            ->all();
+    }
+
+    /**
+     * Daftar transaksi penjualan periode (untuk ekspor / section laporan).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function salesTransactions(array $range): array
+    {
+        return Sale::query()
+            ->with('user:id,name')
+            ->withCount('items')
+            ->where('status', SaleStatus::Completed)
+            ->whereBetween('sold_at', $range)
+            ->orderBy('sold_at')
+            ->get()
+            ->map(fn (Sale $s) => [
+                'invoice_number' => $s->invoice_number,
+                'sold_at' => $s->sold_at,
+                'cashier' => $s->user?->name,
+                'items_count' => $s->items_count,
+                'total' => $s->total,
+            ])
+            ->all();
+    }
+
+    /**
+     * Daftar penerimaan periode (untuk ekspor / section laporan).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function purchaseReceiptsList(array $range): array
+    {
+        return PurchaseReceipt::query()
+            ->with(['user:id,name', 'purchaseOrder:id,po_number,supplier_id', 'purchaseOrder.supplier:id,name', 'items'])
+            ->whereBetween('received_at', $range)
+            ->orderBy('received_at')
+            ->get()
+            ->map(fn (PurchaseReceipt $r) => [
+                'receipt_number' => $r->receipt_number,
+                'received_at' => $r->received_at,
+                'po_number' => $r->purchaseOrder?->po_number,
+                'supplier' => $r->purchaseOrder?->supplier?->name ?? 'Penerimaan manual (tanpa PO)',
+                'items_count' => $r->items->count(),
+                'total_cents' => $r->items->sum(fn ($i) => $i->quantity * Money::fromSum($i->unit_price)),
+            ])
+            ->all();
+    }
+
+    /**
      * Laba rugi sederhana: HPP memakai purchase_price BATCH asal keluar
      * (sale_items.batch_id), bukan harga beli master — harga beli bisa beda
      * antar batch. Item tanpa harga beli dihitung HPP 0 dan dilaporkan.

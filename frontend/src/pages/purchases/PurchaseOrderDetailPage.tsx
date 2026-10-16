@@ -109,6 +109,7 @@ export function PurchaseOrderDetailPage() {
           <thead>
             <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
               <SortHeader label="Obat" sortKey="obat" sort={sort} onToggle={toggleSort} />
+              <th className="px-4 py-3">Satuan</th>
               <SortHeader label="Dipesan" sortKey="dipesan" sort={sort} onToggle={toggleSort} align="right" />
               <SortHeader label="Diterima" sortKey="diterima" sort={sort} onToggle={toggleSort} align="right" />
               <SortHeader label="Harga" sortKey="harga" sort={sort} onToggle={toggleSort} align="right" />
@@ -125,6 +126,9 @@ export function PurchaseOrderDetailPage() {
                       {item.medicine?.name ?? '—'}
                     </p>
                     <p className="text-[11px] text-ink-secondary">{item.medicine?.code ?? ''}</p>
+                  </td>
+                  <td className="px-4 py-3 text-[13px] text-ink-secondary">
+                    {item.medicine?.unit?.name ?? '—'}
                   </td>
                   <td className="px-4 py-3 text-right text-ink-secondary">{item.quantity}</td>
                   <td
@@ -178,10 +182,13 @@ export function PurchaseOrderDetailPage() {
                         {item.medicine?.name ?? '—'}
                       </td>
                       <td className="px-4 py-2 text-[13px] text-ink-secondary">
+                        {item.medicine?.unit?.name ?? '—'}
+                      </td>
+                      <td className="px-4 py-2 text-[13px] text-ink-secondary">
                         Batch {item.batch?.batch_number ?? '—'}
                       </td>
                       <td className="px-4 py-2 text-right text-[13px] text-ink-secondary">
-                        {item.quantity} unit
+                        {item.quantity} {item.medicine?.unit?.name ?? 'unit'}
                       </td>
                       <td className="px-4 py-2 text-right text-[13px] font-semibold text-ink">
                         {formatRupiah(item.unit_cost)}

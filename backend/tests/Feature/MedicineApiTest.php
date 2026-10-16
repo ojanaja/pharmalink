@@ -75,4 +75,24 @@ class MedicineApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data');
     }
+
+    public function test_show_obat_mengirim_stock_total(): void
+    {
+        $medicine = Medicine::create($this->payload());
+        $medicine->batches()->create([
+            'batch_number' => 'BTH-S-001',
+            'expiry_date' => now()->addYear()->toDateString(),
+            'quantity_on_hand' => 12,
+        ]);
+        $medicine->batches()->create([
+            'batch_number' => 'BTH-S-002',
+            'expiry_date' => now()->addMonths(6)->toDateString(),
+            'quantity_on_hand' => 8,
+        ]);
+
+        $this->withToken($this->owner->createToken('api')->plainTextToken)
+            ->getJson("/api/medicines/{$medicine->id}")
+            ->assertOk()
+            ->assertJsonPath('data.stock_total', 20); // konsisten dengan index (Σ batches)
+    }
 }

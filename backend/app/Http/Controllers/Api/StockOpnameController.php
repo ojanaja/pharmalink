@@ -37,6 +37,9 @@ class StockOpnameController extends Controller
         $opnames = StockOpname::query()
             ->with('user:id,name')
             ->withCount('items')
+            // Items diload (kolom minimal) agar ringkasan selisih di resource
+            // tersedia juga di daftar, bukan hanya di detail.
+            ->with('items:opname_id,system_qty,physical_qty')
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->orderByDesc('opname_at')
             ->orderByDesc('id')

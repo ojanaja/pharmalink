@@ -6,7 +6,7 @@ export interface Medicine {
   unit: { id: number; name: string } | null
   sale_price: string
   min_stock: number
-  stock_total: string
+  stock_total: string | null
   is_active: boolean
   description: string | null
 }
@@ -139,6 +139,8 @@ export interface Supplier {
   contact_person: string | null
   phone: string | null
   address: string | null
+  /** Pivot harga beli — hanya ada di endpoint show. */
+  medicines?: Array<{ medicine_id: number; code: string; name: string; purchase_price: string }>
 }
 
 export interface Category {
@@ -170,14 +172,19 @@ export interface PoItem {
   received_quantity: number | null
   unit_price: string
   subtotal: string
-  medicine: { id: number; code: string; name: string } | null
+  medicine: { id: number; code: string; name: string; unit: { id: number; name: string } | null } | null
 }
 
 export interface PurchaseReceiptItem {
   id: number
   quantity: number
   unit_cost: string
-  medicine: { id: number; code: string; name: string } | null
+  medicine: {
+    id: number
+    code: string
+    name: string
+    unit: { id: number; name: string } | null
+  } | null
   batch: { id: number; batch_number: string } | null
   /** Agregat retur pembelian per receipt item (M8). */
   returned_quantity: number
@@ -224,7 +231,8 @@ export interface StockOpname {
   status: string
   note: string | null
   user: { id: number; name: string } | null
-  summary: {
+  /** Hanya ada di respons show/store/update — endpoint index tidak mengirim ringkasan. */
+  summary?: {
     total_items: number
     adjusted_items: number
     increased_items: number

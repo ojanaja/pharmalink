@@ -1,15 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
-import { Eye, Upload } from 'lucide-react'
+import { Eye, Search, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
+import { Input } from '../components/ui/Field'
 import { Pagination } from '../components/ui/Pagination'
 import { SortHeader } from '../components/ui/SortHeader'
 import { api } from '../lib/api'
 import { formatRupiah } from '../lib/format'
 import { stockStatus } from '../lib/medicine'
 import { sortRows, useSort } from '../lib/sort'
+import { useDebounce } from '../lib/useDebounce'
 import type { LaravelPaginated, Medicine } from '../lib/types'
 import { ImportMedicinesModal } from './MedicinesImportModal'
 
@@ -53,11 +55,16 @@ export function MedicinesPage() {
   const [page, setPage] = useState(1)
   const [importOpen, setImportOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search)
   const { sort, toggleSort } = useSort()
 
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ['medicines', page],
-    queryFn: () => api<LaravelPaginated<Medicine>>(`/medicines?page=${page}`),
+    queryKey: ['medicines', page, debouncedSearch],
+    queryFn: () =>
+      api<LaravelPaginated<Medicine>>(
+        `/medicines?page=${page}&search=${encodeURIComponent(debouncedSearch)}`,
+      ),
   })
 
   // Sort & filter client-side — hanya berlaku untuk halaman data yang sedang tampil (paginasi per 15).
@@ -79,22 +86,41 @@ export function MedicinesPage() {
       </div>
 
       <div className="flex items-center justify-between gap-4">
-        <div className="flex gap-2">
-          {STATUS_FILTERS.map((filter) => (
-            <button
-              key={filter.key}
-              type="button"
-              onClick={() => setStatusFilter(filter.key)}
-              aria-pressed={statusFilter === filter.key}
-              className={`rounded-full border px-3.5 py-1.5 text-[13px] font-bold transition-colors ${
-                statusFilter === filter.key
-                  ? 'border-primary bg-primary text-white'
-                  : 'border-line bg-surface text-ink-secondary hover:border-primary hover:text-primary'
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-4">
+          <div className="relative w-72">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-placeholder"
+              aria-hidden="true"
+            />
+            <Input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value)
+                setPage(1)
+              }}
+              placeholder="Cari kode atau nama obat…"
+              className="pl-9"
+              aria-label="Cari obat"
+            />
+          </div>
+          <div className="flex gap-2">
+            {STATUS_FILTERS.map((filter) => (
+              <button
+                key={filter.key}
+                type="button"
+                onClick={() => setStatusFilter(filter.key)}
+                aria-pressed={statusFilter === filter.key}
+                className={`rounded-full border px-3.5 py-1.5 text-[13px] font-bold transition-colors ${
+                  statusFilter === filter.key
+                    ? 'border-primary bg-primary text-white'
+                    : 'border-line bg-surface text-ink-secondary hover:border-primary hover:text-primary'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
         </div>
         <Button variant="secondary" size="sm" icon={<Upload size={14} />} onClick={() => setImportOpen(true)}>
           Impor

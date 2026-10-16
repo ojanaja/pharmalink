@@ -12,6 +12,8 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 /**
  * Ekspor laporan ke CSV (selalu tersedia) atau XLSX (PhpSpreadsheet).
  * CSV: BOM UTF-8 + delimiter ';' + tanggal dd/mm/yyyy (Excel Indonesia).
+ * Struktur umum: [baris judul opsional] + header + baris data;
+ * laporan penjualan/pembelian punya section kedua (daftar transaksi).
  */
 class ReportExportService
 {
@@ -24,26 +26,27 @@ class ReportExportService
      */
     public function download(string $report, string $format, array $params): Response
     {
-        [$headings, $rows] = $this->table($report, $params);
+        [$title, $headings, $rows] = $this->table($report, $params);
 
         $filename = sprintf('laporan-%s-%s.%s', $report, now()->format('Ymd'), $format);
 
         return $format === 'xlsx'
-            ? $this->xlsx($headings, $rows, $filename)
-            : $this->csv($headings, $rows, $filename);
+            ? $this->xlsx($title, $headings, $rows, $filename)
+            : $this->csv($title, $headings, $rows, $filename);
     }
 
     /**
-     * @return array{0: array<int, string>, 1: array<int, array<int, string|int>>}
+     * @return array{0: ?string, 1: array<int, string>, 2: array<int, array<int, string|int>>}
      */
     protected function table(string $report, array $params): array
     {
         $from = Carbon::createFromFormat('Y-m-d', $params['from'] ?? today()->startOfMonth()->toDateString());
         $to = Carbon::createFromFormat('Y-m-d', $params['to'] ?? today()->toDateString());
+        $range = [$from->copy()->startOfDay(), $to->copy()->endOfDay()];
 
         return match ($report) {
-            'sales' => $this->salesTable($from, $to),
-            'purchases' => $this->purchasesTable($from, $to),
+            'sales' => $this->salesTable($range),
+            'purchases' => $this->purchasesTable($range),
             'stock' => $this->stockTable(),
             'expiry' => $this->expiryTable((int) ($params['days'] ?? 30)),
             default => abort(404),
@@ -51,44 +54,87 @@ class ReportExportService
     }
 
     /**
-     * @return array{0: array<int, string>, 1: array<int, array<int, string|int>>}
+     * @param  array<int, \Carbon\Carbon|string>  $range
+     * @return array{0: ?string, 1: array<int, string>, 2: array<int, array<int, string|int>>}
      */
-    protected function salesTable(Carbon $from, Carbon $to): array
+    protected function salesTable(array $range): array
     {
         $rows = array_map(fn ($m) => [
             $m['code'], $m['name'], $m['quantity'], $m['omzet'],
-        ], $this->reports->salesPerMedicine([$from->copy()->startOfDay(), $to->copy()->endOfDay()]));
+        ], $this->reports->salesPerMedicine($range));
 
-        return [['Kode Obat', 'Nama Obat', 'Jumlah Terjual', 'Omzet (Rp)'], $rows];
+        // Section 2: daftar transaksi periode (tanggal transaksi tidak masuk akal
+        // di agregat per obat, jadi dipisah — keputusan review).
+        $rows[] = [];
+        $rows[] = ['DAFTAR TRANSAKSI'];
+        $rows[] = ['Nomor Invoice', 'Tanggal', 'Kasir', 'Jumlah Item', 'Total (Rp)'];
+
+        foreach ($this->reports->salesTransactions($range) as $t) {
+            $rows[] = [
+                $t['invoice_number'], $this->idDate($t['sold_at']?->toDateString()),
+                $t['cashier'], $t['items_count'], $t['total'],
+            ];
+        }
+
+        return [null, ['Kode Obat', 'Nama Obat', 'Jumlah Terjual', 'Omzet (Rp)'], $rows];
     }
 
     /**
-     * @return array{0: array<int, string>, 1: array<int, array<int, string|int>>}
+     * @return array{0: ?string, 1: array<int, string>, 2: array<int, array<int, string|int>>}
      */
-    protected function purchasesTable(Carbon $from, Carbon $to): array
+    protected function purchasesTable(array $range): array
     {
         $rows = array_map(fn ($m) => [
             $m['code'], $m['name'], $m['quantity'], $m['total'],
-        ], $this->reports->purchasesPerMedicine([$from->copy()->startOfDay(), $to->copy()->endOfDay()]));
+        ], $this->reports->purchasesPerMedicine($range));
 
-        return [['Kode Obat', 'Nama Obat', 'Jumlah Diterima', 'Total (Rp)'], $rows];
+        $rows[] = [];
+        $rows[] = ['DAFTAR PENERIMAAN'];
+        $rows[] = ['Nomor Receipt', 'Tanggal Penerimaan', 'Nomor PO', 'Supplier', 'Jumlah Item', 'Total (Rp)'];
+
+        foreach ($this->reports->purchaseReceiptsList($range) as $r) {
+            $rows[] = [
+                $r['receipt_number'], $this->idDate($r['received_at']?->toDateString()),
+                $r['po_number'] ?? '-', $r['supplier'], $r['items_count'],
+                Money::toDecimal($r['total_cents']),
+            ];
+        }
+
+        return [null, ['Kode Obat', 'Nama Obat', 'Jumlah Diterima', 'Total (Rp)'], $rows];
     }
 
     /**
-     * @return array{0: array<int, string>, 1: array<int, array<int, string|int>>}
+     * Laporan stok PER BATCH (bukan per obat) + baris TOTAL.
+     *
+     * @return array{0: string, 1: array<int, string>, 2: array<int, array<int, string|int>>}
      */
     protected function stockTable(): array
     {
-        $rows = array_map(fn ($m) => [
-            $m['code'], $m['name'], (string) $m['category'], $m['stock_total'],
-            $m['min_stock'], ucfirst($m['status']), $m['stock_value'],
-        ], $this->reports->stock()['medicines']);
+        $title = 'Laporan Stok — per tanggal '.$this->idDate(today()->toDateString());
 
-        return [['Kode Obat', 'Nama Obat', 'Kategori', 'Stok', 'Min. Stok', 'Status', 'Nilai Stok (Rp)'], $rows];
+        $rows = [];
+        $totalCents = 0;
+
+        foreach ($this->reports->stockBatches() as $b) {
+            $totalCents += $b['value_cents'];
+            $rows[] = [
+                $b['code'], $b['name'], (string) ($b['category'] ?? ''), (string) ($b['unit'] ?? ''),
+                $b['batch_number'], $this->idDate($b['expiry_date']),
+                $b['quantity'], $b['purchase_price'] ?? '0.00', Money::toDecimal($b['value_cents']),
+            ];
+        }
+
+        $rows[] = ['', '', '', '', '', '', '', 'TOTAL', Money::toDecimal($totalCents)];
+
+        return [
+            $title,
+            ['Kode Obat', 'Nama Obat', 'Kategori', 'Satuan', 'Nomor Batch', 'Tanggal Kedaluwarsa', 'Stok Batch', 'Harga Beli', 'Nilai Batch'],
+            $rows,
+        ];
     }
 
     /**
-     * @return array{0: array<int, string>, 1: array<int, array<int, string|int>>}
+     * @return array{0: ?string, 1: array<int, string>, 2: array<int, array<int, string|int>>}
      */
     protected function expiryTable(int $days): array
     {
@@ -104,7 +150,7 @@ class ReportExportService
                 $this->idDate($b['expiry_date']), $b['quantity_on_hand'], $b['stock_value'], 'Mendekati'];
         }
 
-        return [['Kode Obat', 'Nama Obat', 'No. Batch', 'Tgl Kedaluwarsa', 'Stok', 'Nilai (Rp)', 'Status'], $rows];
+        return [null, ['Kode Obat', 'Nama Obat', 'No. Batch', 'Tgl Kedaluwarsa', 'Stok', 'Nilai (Rp)', 'Status'], $rows];
     }
 
     /**
@@ -138,9 +184,16 @@ class ReportExportService
      * @param  array<int, string>  $headings
      * @param  array<int, array<int, string|int>>  $rows
      */
-    protected function csv(array $headings, array $rows, string $filename): Response
+    protected function csv(?string $title, array $headings, array $rows, string $filename): Response
     {
-        $lines = [implode(';', array_map($this->csvCell(...), $headings))];
+        $lines = [];
+
+        if ($title !== null) {
+            $lines[] = $this->csvCell($title);
+        }
+
+        $lines[] = implode(';', array_map($this->csvCell(...), $headings));
+
         foreach ($rows as $row) {
             $lines[] = implode(';', array_map($this->csvCell(...), $row));
         }
@@ -155,7 +208,7 @@ class ReportExportService
      * @param  array<int, string>  $headings
      * @param  array<int, array<int, string|int>>  $rows
      */
-    protected function xlsx(array $headings, array $rows, string $filename): Response
+    protected function xlsx(?string $title, array $headings, array $rows, string $filename): Response
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
@@ -171,12 +224,23 @@ class ReportExportService
             }
         };
 
-        $writeRow($headings, 1);
-        foreach (array_values($rows) as $i => $row) {
-            $writeRow($row, $i + 2);
+        $excelRow = 1;
+
+        if ($title !== null) {
+            $writeRow([$title], $excelRow);
+            $sheet->getStyle([1, $excelRow, 1, $excelRow])->getFont()->setBold(true);
+            $excelRow++;
         }
 
-        $sheet->getStyle('A1')->getFont()->setBold(true);
+        $writeRow($headings, $excelRow);
+        $sheet->getStyle([1, $excelRow, count($headings), $excelRow])->getFont()->setBold(true);
+        $excelRow++;
+
+        foreach (array_values($rows) as $row) {
+            $writeRow($row, $excelRow);
+            $excelRow++;
+        }
+
         foreach (range('A', chr(ord('A') + count($headings) - 1)) as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }

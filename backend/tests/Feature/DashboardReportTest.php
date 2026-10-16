@@ -223,8 +223,11 @@ class DashboardReportTest extends TestCase
             ],
         ], $this->owner);
 
+        // Rentang eksplisit hari ini: seed relative (subDays) tidak bocor ke periode
+        // saat tanggal sistem bergeser — test harus deterministik terhadap kalender.
+        $today = now()->toDateString();
         $data = $this->withToken($this->token())
-            ->getJson('/api/reports/profit-loss')
+            ->getJson("/api/reports/profit-loss?from={$today}&to={$today}")
             ->assertOk()
             ->json('data');
 

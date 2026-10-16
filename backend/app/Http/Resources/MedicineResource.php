@@ -25,7 +25,12 @@ class MedicineResource extends JsonResource
             'min_stock' => $this->min_stock,
             'description' => $this->description,
             'is_active' => $this->is_active,
-            'stock_total' => $this->when(isset($this->stock_total), $this->stock_total),
+            'stock_total' => $this->when(
+                isset($this->stock_total) || $this->relationLoaded('batches'),
+                fn () => isset($this->stock_total)
+                    ? (int) $this->stock_total
+                    : (int) $this->batches->sum('quantity_on_hand')
+            ),
             'batches' => BatchResource::collection($this->whenLoaded('batches')),
         ];
     }

@@ -20,6 +20,7 @@ interface ReceiptErrorItem {
 interface ReceiptFormRow {
   po_item_id: number
   medicineName: string
+  unitName: string
   quantity: number
   batch_number: string
   expiry_date: string
@@ -53,6 +54,7 @@ export function ReceiptFormModal({ open, poId, items, onClose, onCreated }: Rece
           return {
             po_item_id: item.id,
             medicineName: item.medicine?.name ?? `Item #${item.id}`,
+            unitName: item.medicine?.unit?.name ?? '',
             quantity: remaining,
             batch_number: '',
             expiry_date: '',
@@ -167,7 +169,12 @@ export function ReceiptFormModal({ open, poId, items, onClose, onCreated }: Rece
         <div className="flex flex-col gap-3">
           {rows.map((row) => (
             <div key={row.po_item_id} className="rounded-lg border border-line p-3">
-              <p className="mb-2 text-[13px] font-semibold text-ink">{row.medicineName}</p>
+              <p className="mb-2 text-[13px] font-semibold text-ink">
+                {row.medicineName}
+                {row.unitName && (
+                  <span className="ml-2 font-normal text-ink-secondary">· {row.unitName}</span>
+                )}
+              </p>
               <div className="grid grid-cols-4 gap-2">
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] text-ink-secondary">Qty diterima</span>

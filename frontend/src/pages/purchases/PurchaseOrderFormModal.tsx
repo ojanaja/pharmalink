@@ -171,6 +171,13 @@ export function PurchaseOrderFormModal({ open, onClose, onCreated }: PurchaseOrd
                   ))}
                 </Select>
               </div>
+              <div className="w-20">
+                {index === 0 && <span className="mb-1 block text-[11px] text-ink-secondary">Satuan</span>}
+                <span className="flex h-10 items-center text-[13px] text-ink-secondary">
+                  {medicines?.data.find((medicine) => medicine.id === item.medicine_id)?.unit
+                    ?.name ?? '—'}
+                </span>
+              </div>
               <div className="w-24">
                 {index === 0 && <span className="mb-1 block text-[11px] text-ink-secondary">Qty</span>}
                 <Input

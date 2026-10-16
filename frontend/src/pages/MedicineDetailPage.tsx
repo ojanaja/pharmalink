@@ -126,7 +126,10 @@ export function MedicineDetailPage() {
     )
   }
 
-  const stock = Number(medicine.stock_total)
+  const stock = Number(
+    // Backend show tidak selalu mengirim stock_total — fallback jumlah qty batch agar tidak NaN.
+    medicine.stock_total ?? batches.reduce((sum, batch) => sum + batch.quantity_on_hand, 0),
+  )
   const status = stockStatus(stock, medicine.min_stock)
   const nearestBatch = batches.find((batch) => batch.quantity_on_hand > 0) ?? batches[0]
   const nearestDays = nearestBatch ? daysUntil(nearestBatch.expiry_date) : null

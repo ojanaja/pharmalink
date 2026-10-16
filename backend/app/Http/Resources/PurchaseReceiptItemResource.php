@@ -13,11 +13,22 @@ class PurchaseReceiptItemResource extends JsonResource
             'id' => $this->id,
             'quantity' => $this->quantity,
             'unit_cost' => $this->unit_price,
-            'medicine' => $this->whenLoaded('medicine', fn () => [
-                'id' => $this->medicine->id,
-                'code' => $this->medicine->code,
-                'name' => $this->medicine->name,
-            ]),
+            'medicine' => $this->whenLoaded('medicine', function () {
+                $medicine = [
+                    'id' => $this->medicine->id,
+                    'code' => $this->medicine->code,
+                    'name' => $this->medicine->name,
+                ];
+
+                if ($this->medicine->relationLoaded('unit')) {
+                    $medicine['unit'] = [
+                        'id' => $this->medicine->unit->id,
+                        'name' => $this->medicine->unit->name,
+                    ];
+                }
+
+                return $medicine;
+            }),
             'batch' => $this->whenLoaded('batch', fn () => [
                 'id' => $this->batch->id,
                 'batch_number' => $this->batch->batch_number,

@@ -74,9 +74,11 @@ class PurchaseOrderController extends Controller
         $purchaseOrder->load([
             'supplier:id,name',
             'user:id,name',
-            'items.medicine:id,code,name',
+            'items.medicine:id,code,name,unit_id',
+            'items.medicine.unit:id,name',
             'receipts' => fn ($q) => $q->orderByDesc('received_at'),
-            'receipts.items.medicine:id,code,name',
+            'receipts.items.medicine:id,code,name,unit_id',
+            'receipts.items.medicine.unit:id,name',
             'receipts.items.batch:id,batch_number',
         ]);
 

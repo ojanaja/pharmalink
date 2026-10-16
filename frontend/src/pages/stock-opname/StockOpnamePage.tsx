@@ -169,8 +169,8 @@ export function StockOpnamePage() {
           <p className="text-2xl font-bold text-ink">Stock Opname Selesai</p>
           <p className="mt-1 text-[13px] font-semibold text-primary">{done.opname_number}</p>
           <p className="mt-1 text-[13px] text-ink-secondary">
-            {done.summary.adjusted_items} dari {done.summary.total_items} item memiliki selisih (
-            {done.summary.increased_items} bertambah, {done.summary.decreased_items} berkurang).
+            {done.summary?.adjusted_items ?? '—'} dari {done.summary?.total_items ?? '—'} item memiliki selisih (
+            {done.summary?.increased_items ?? '—'} bertambah, {done.summary?.decreased_items ?? '—'} berkurang).
             Mutasi penyesuaian stok telah dibuat.
           </p>
         </div>
@@ -190,7 +190,7 @@ export function StockOpnamePage() {
               <Badge variant="warning">Draft</Badge>
             </div>
             <p className="mt-1 text-sm text-ink-secondary">
-              {touched.size} / {active.summary.total_items} item dihitung ·{' '}
+              {touched.size} / {active.summary?.total_items ?? '—'} item dihitung ·{' '}
               {diffItems.length} item selisih
             </p>
           </div>
@@ -420,7 +420,7 @@ export function StockOpnamePage() {
           </p>
           <div className="mt-4 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-lg bg-table-header p-3">
-              <p className="text-lg font-bold text-ink">{active.summary.total_items}</p>
+              <p className="text-lg font-bold text-ink">{active.summary?.total_items ?? '—'}</p>
               <p className="text-[10px] font-bold uppercase text-ink-secondary">Item dihitung</p>
             </div>
             <div className="rounded-lg bg-warning-bg p-3">
@@ -429,7 +429,7 @@ export function StockOpnamePage() {
             </div>
             <div className="rounded-lg bg-success-bg p-3">
               <p className="text-lg font-bold text-success-ink">
-                {active.summary.total_items - diffItems.length}
+                {(active.summary?.total_items ?? 0) - diffItems.length}
               </p>
               <p className="text-[10px] font-bold uppercase text-success-ink">Tanpa selisih</p>
             </div>
@@ -514,9 +514,9 @@ export function StockOpnamePage() {
                   case 'tanggal':
                     return opname.opname_at
                   case 'item':
-                    return opname.summary.total_items
+                    return opname.summary?.total_items ?? null
                   case 'selisih':
-                    return opname.summary.adjusted_items
+                    return opname.summary?.adjusted_items ?? null
                   default:
                     return null
                 }
@@ -528,10 +528,10 @@ export function StockOpnamePage() {
                     <td className="px-4 py-3 text-ink-secondary">{opname.opname_at}</td>
                     <td className="px-4 py-3 text-ink-secondary">{opname.user?.name ?? '—'}</td>
                     <td className="px-4 py-3 text-right text-ink-secondary">
-                      {opname.summary.total_items}
+                      {opname.summary?.total_items ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-ink">
-                      {opname.summary.adjusted_items}
+                      {opname.summary?.adjusted_items ?? '—'}
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant={status.variant}>{status.label}</Badge>
@@ -590,8 +590,8 @@ function OpnameDetailModal({ opnameId, onClose }: { opnameId: number | null; onC
       ) : (
         <div className="flex flex-col gap-4">
           <p className="text-[13px] text-ink-secondary">
-            {opname.opname_at} · {opname.user?.name ?? '—'} · {opname.summary.total_items} item ·{' '}
-            {opname.summary.adjusted_items} selisih
+            {opname.opname_at} · {opname.user?.name ?? '—'} · {opname.summary?.total_items ?? '—'} item ·{' '}
+            {opname.summary?.adjusted_items ?? '—'} selisih
             {opname.note ? ` · Catatan: ${opname.note}` : ''}
           </p>
           {diffs.length === 0 ? (

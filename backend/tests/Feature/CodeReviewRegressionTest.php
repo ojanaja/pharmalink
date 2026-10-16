@@ -158,10 +158,15 @@ class CodeReviewRegressionTest extends TestCase
     public function test_csv_export_sanitasi_formula_injection(): void
     {
         $this->medicine->update(['name' => '=cmd|/c calc!A1']);
-        Medicine::create([
+        $second = Medicine::create([
             'code' => 'MED-002', 'name' => "Obah; \"penting\"\n lanjut",
             'category_id' => $this->medicine->category_id, 'unit_id' => $this->medicine->unit_id,
             'sale_price' => '1000.00',
+        ]);
+        // Laporan stok per batch hanya memuat batch berstok.
+        $second->batches()->create([
+            'batch_number' => 'BTH-B-001', 'expiry_date' => now()->addYear()->toDateString(),
+            'quantity_on_hand' => 7,
         ]);
 
         $response = $this->withToken($this->token())

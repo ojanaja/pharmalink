@@ -18,11 +18,22 @@ class PurchaseOrderItemResource extends JsonResource
                 $this->unit_price !== null,
                 fn () => $this->toDecimal($this->toCents((string) $this->unit_price) * $this->quantity)
             ),
-            'medicine' => $this->whenLoaded('medicine', fn () => [
-                'id' => $this->medicine->id,
-                'code' => $this->medicine->code,
-                'name' => $this->medicine->name,
-            ]),
+            'medicine' => $this->whenLoaded('medicine', function () {
+                $medicine = [
+                    'id' => $this->medicine->id,
+                    'code' => $this->medicine->code,
+                    'name' => $this->medicine->name,
+                ];
+
+                if ($this->medicine->relationLoaded('unit')) {
+                    $medicine['unit'] = [
+                        'id' => $this->medicine->unit->id,
+                        'name' => $this->medicine->unit->name,
+                    ];
+                }
+
+                return $medicine;
+            }),
         ];
     }
 

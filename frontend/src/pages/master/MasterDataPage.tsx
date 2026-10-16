@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../../auth/useAuth'
 import { Badge } from '../../components/ui/Badge'
@@ -12,6 +12,7 @@ import { ApiError, api } from '../../lib/api'
 import { formatRupiah } from '../../lib/format'
 import { sortRows, useSort } from '../../lib/sort'
 import type { Category, LaravelPaginated, Medicine, Supplier, Unit } from '../../lib/types'
+import { ImportMedicinesModal } from '../MedicinesImportModal'
 import { MedicineFormModal } from './MedicineFormModal'
 import { SupplierFormModal } from './SupplierFormModal'
 
@@ -71,6 +72,7 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
   const [deleting, setDeleting] = useState<Medicine | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deletingSubmit, setDeletingSubmit] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const { sort, toggleSort } = useSort()
 
   const { data, isPending, isError, refetch } = useQuery({
@@ -103,16 +105,21 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <h3 className="text-[15px] font-bold text-ink">Daftar Obat</h3>
           {isOwner && (
-            <Button
-              size="sm"
-              icon={<Plus size={14} />}
-              onClick={() => {
-                setEditing(null)
-                setFormOpen(true)
-              }}
-            >
-              Tambah obat
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" icon={<Upload size={14} />} onClick={() => setImportOpen(true)}>
+                Impor
+              </Button>
+              <Button
+                size="sm"
+                icon={<Plus size={14} />}
+                onClick={() => {
+                  setEditing(null)
+                  setFormOpen(true)
+                }}
+              >
+                Tambah obat
+              </Button>
+            </div>
           )}
         </div>
 
@@ -241,6 +248,12 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
         }}
       />
 
+      <ImportMedicinesModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={() => queryClient.invalidateQueries({ queryKey: ['medicines'] })}
+      />
+
       <Modal
         open={deleting !== null}
         title="Hapus data obat?"
@@ -363,7 +376,15 @@ function SuppliersTab({ isOwner }: { isOwner: boolean }) {
     queryFn: () => api<LaravelPaginated<Supplier>>('/suppliers?per_page=100'),
   })
 
+  // Pivot obat+harga hanya ada di endpoint show — muat saat baris dipilih.
+  const detailQuery = useQuery({
+    queryKey: ['supplier', selectedId],
+    queryFn: () => api<{ data: Supplier }>(`/suppliers/${selectedId}`),
+    enabled: selectedId !== null,
+  })
+
   const selected = data?.data.find((supplier) => supplier.id === selectedId) ?? null
+  const selectedDetail = detailQuery.data?.data ?? null
   const visibleSuppliers = sortRows(data?.data ?? [], sort, (supplier, key) => {
     switch (key) {
       case 'name':
@@ -489,6 +510,42 @@ function SuppliersTab({ isOwner }: { isOwner: boolean }) {
                 </div>
               ))}
             </dl>
+
+            <div className="border-t border-line pt-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-ink-secondary">
+                Obat & harga beli
+              </p>
+              {detailQuery.isPending ? (
+                <div className="mt-2 h-16 animate-pulse rounded bg-neutral-bg" />
+              ) : selectedDetail?.medicines && selectedDetail.medicines.length > 0 ? (
+                <table className="mt-2 w-full text-left text-sm">
+                  <thead>
+                    <tr className="text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
+                      <th className="py-1 pr-2">Kode</th>
+                      <th className="py-1 pr-2">Nama Obat</th>
+                      <th className="py-1 text-right">Harga Beli</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedDetail.medicines.map((item) => (
+                      <tr key={item.medicine_id} className="border-t border-line">
+                        <td className="py-1.5 pr-2 text-[11px] text-ink-secondary">{item.code}</td>
+                        <td className="py-1.5 pr-2 text-[12px] font-semibold text-ink">
+                          {item.name}
+                        </td>
+                        <td className="py-1.5 text-right text-[12px] text-ink">
+                          {formatRupiah(item.purchase_price)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="mt-2 rounded-lg bg-table-header px-3 py-2 text-[11px] text-ink-secondary">
+                  Supplier ini belum memiliki harga obat terdaftar.
+                </p>
+              )}
+            </div>
           </div>
         ) : (
           <p className="py-8 text-center text-[13px] text-ink-secondary">
