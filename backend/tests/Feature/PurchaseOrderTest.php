@@ -228,9 +228,10 @@ class PurchaseOrderTest extends TestCase
         $this->assertSame(1, StockMovement::count());
     }
 
-    public function test_batch_number_dipakai_obat_lain_ditolak_po(): void
+    public function test_nomor_batch_sama_antar_obat_diizinkan_po(): void
     {
-        // Regression A4-M4: guard identitas batch juga berlaku antar obat di jalur PO.
+        // Revisi domain: nomor batch di-scope per obat — BATCH bersama antar
+        // obat (dengan expiry berbeda) sah; guard hanya untuk obat yang sama.
         $this->medicineA->batches()->create([
             'batch_number' => 'BTH-SHARED-PO',
             'expiry_date' => '2027-05-31',
@@ -242,23 +243,27 @@ class PurchaseOrderTest extends TestCase
             'items' => [['medicine_id' => $this->medicineB->id, 'quantity' => 10, 'unit_price' => '8500.00']],
         ])->assertCreated()->json('data');
 
-        $response = $this->withToken($this->token())->postJson(
+        $this->withToken($this->token())->postJson(
             "/api/purchase-orders/{$po['id']}/receipts",
             ['items' => [[
                 'po_item_id' => $po['items'][0]['id'],
                 'batch_number' => 'BTH-SHARED-PO',
-                'expiry_date' => '2027-12-31',
+                'expiry_date' => '2027-12-01',
                 'quantity' => 5,
             ]]],
-        );
+        )->assertCreated();
 
-        $response->assertUnprocessable();
-        $this->assertStringContainsString('obat lain', (string) $response->json('message'));
+        // Batch kedua tercipta untuk obat B (expiry berbeda dari obat A); stok benar.
+        $batchB = Batch::query()->where('medicine_id', $this->medicineB->id)->sole();
+        $this->assertSame('BTH-SHARED-PO', $batchB->batch_number);
+        $this->assertSame('2027-12-01', $batchB->expiry_date->toDateString());
+        $this->assertSame(5, $batchB->quantity_on_hand);
 
-        // Rollback total: tidak ada batch/movement baru, PO tetap ordered.
-        $this->assertSame(1, Batch::count());
-        $this->assertSame(0, StockMovement::count());
-        $this->assertSame('ordered', \App\Models\PurchaseOrder::sole()->status->value);
+        // Batch obat A tidak tersentuh.
+        $this->assertSame(0, $this->medicineA->batches()->sole()->quantity_on_hand);
+        // PO 10 diterima 5 -> partially_received.
+        $this->assertSame('partially_received', \App\Models\PurchaseOrder::sole()->status->value);
+        $this->assertSame(1, StockMovement::count());
     }
 
     public function test_item_bukan_milik_po_ditolak_validasi(): void

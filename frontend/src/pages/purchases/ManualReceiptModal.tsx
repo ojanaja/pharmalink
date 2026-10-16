@@ -80,7 +80,7 @@ export function ManualReceiptModal({ open, onClose }: ManualReceiptModalProps) {
             batch_number: item.batch_number.trim(),
             expiry_date: item.expiry_date,
             quantity: item.quantity,
-            unit_cost: item.unit_cost === '' ? null : Number(item.unit_cost),
+            unit_cost: Number(item.unit_cost),
           })),
         },
       })
@@ -103,7 +103,11 @@ export function ManualReceiptModal({ open, onClose }: ManualReceiptModalProps) {
         item.batch_number.trim() !== '' &&
         item.expiry_date !== '' &&
         item.expiry_date >= TODAY &&
-        item.quantity > 0,
+        item.quantity > 0 &&
+        // Backend mewajibkan unit_cost (min 0) — kosong atau negatif ditolak.
+        item.unit_cost !== '' &&
+        Number.isFinite(Number(item.unit_cost)) &&
+        Number(item.unit_cost) >= 0,
     ) &&
     !submitting
 
@@ -219,7 +223,7 @@ export function ManualReceiptModal({ open, onClose }: ManualReceiptModalProps) {
                     min={0}
                     value={item.unit_cost}
                     onChange={(event) => updateItem(index, { unit_cost: event.target.value })}
-                    placeholder="Harga beli (opsional)"
+                    placeholder="Harga beli *"
                     aria-label={`Harga beli item ${index + 1}`}
                   />
                 </div>

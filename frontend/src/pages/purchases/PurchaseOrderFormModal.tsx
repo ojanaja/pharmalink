@@ -41,7 +41,7 @@ export function PurchaseOrderFormModal({ open, onClose, onCreated }: PurchaseOrd
     enabled: open,
   })
 
-  // Total hanya menjumlah baris yang harganya diisi; baris tanpa harga mengikuti harga supplier (server-side).
+  // Total menjumlah seluruh baris; harga beli wajib diisi per baris.
   const estimatedTotal = useMemo(
     () =>
       items.reduce((sum, item) => {
@@ -50,7 +50,6 @@ export function PurchaseOrderFormModal({ open, onClose, onCreated }: PurchaseOrd
       }, 0),
     [items],
   )
-  const somePriceEmpty = items.some((item) => item.unit_price === '')
 
   function updateItem(index: number, patch: Partial<PoFormItem>) {
     setItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)))
@@ -77,8 +76,7 @@ export function PurchaseOrderFormModal({ open, onClose, onCreated }: PurchaseOrd
           items: items.map((item) => ({
             medicine_id: item.medicine_id,
             quantity: item.quantity,
-            // null = server mengambil harga dari pivot medicine_supplier
-            unit_price: item.unit_price === '' ? null : Number(item.unit_price),
+            unit_price: Number(item.unit_price),
           })),
         },
       })
@@ -96,7 +94,12 @@ export function PurchaseOrderFormModal({ open, onClose, onCreated }: PurchaseOrd
   const canSubmit =
     supplierId !== '' &&
     items.length > 0 &&
-    items.every((item) => item.medicine_id !== null && item.quantity > 0) &&
+    items.every(
+      (item) =>
+        item.medicine_id !== null &&
+        item.quantity > 0 &&
+        Number(item.unit_price) > 0,
+    ) &&
     !submitting
 
   return (
@@ -189,11 +192,15 @@ export function PurchaseOrderFormModal({ open, onClose, onCreated }: PurchaseOrd
                 />
               </div>
               <div className="w-36">
-                {index === 0 && <span className="mb-1 block text-[11px] text-ink-secondary">Harga beli</span>}
+                {index === 0 && (
+                  <span className="mb-1 block text-[11px] text-ink-secondary">
+                    Harga beli <span className="text-danger-ink">*</span>
+                  </span>
+                )}
                 <Input
                   type="number"
                   min={0}
-                  placeholder="Otomatis"
+                  placeholder="0"
                   value={item.unit_price}
                   onChange={(event) => updateItem(index, { unit_price: event.target.value })}
                   aria-label={`Harga beli item ${index + 1}`}
@@ -213,14 +220,12 @@ export function PurchaseOrderFormModal({ open, onClose, onCreated }: PurchaseOrd
         </div>
 
         <p className="rounded-lg bg-table-header px-3 py-2 text-[11px] text-ink-secondary">
-          Batch dan tanggal kedaluwarsa dicatat saat penerimaan barang. Harga beli kosong mengikuti
-          harga supplier terakhir.
+          Batch dan tanggal kedaluwarsa dicatat saat penerimaan barang. Harga beli wajib diisi
+          per item.
         </p>
 
         <div className="flex items-center justify-between border-t border-line pt-3">
-          <span className="text-[13px] text-ink-secondary">
-            {somePriceEmpty ? 'Total perkiraan (sebagian harga mengikuti supplier)' : 'Total pembelian'}
-          </span>
+          <span className="text-[13px] text-ink-secondary">Total pembelian</span>
           <span className="text-xl font-bold text-primary">{formatRupiah(estimatedTotal)}</span>
         </div>
 

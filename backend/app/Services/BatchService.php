@@ -9,28 +9,25 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 /**
  * Registry batch untuk penerimaan barang (manual maupun PO).
  *
- * Aturan identitas batch: nomor batch adalah identitas fisik kemasan dari
- * supplier. Satu nomor batch tidak boleh dipakai untuk dua obat berbeda,
- * dan tidak boleh memiliki dua tanggal kedaluwarsa berbeda — bahkan antar
- * obat. Duplikat semacam itu hampir pasti salah ketik dan merusak FEFO.
+ * Aturan identitas batch (keputusan revisi): batch di-scope per (obat,
+ * nomor batch). Satu nomor batch dari supplier boleh dipakai untuk banyak
+ * obat sekaligus dalam kiriman yang sama (boleh beda expiry antar obat);
+ * yang dilarang adalah SATU OBAT punya dua tanggal kedaluwarsa berbeda
+ * untuk nomor batch yang sama — itu hampir pasti salah ketik fatal.
  */
 class BatchService
 {
     /**
-     * @throws HttpResponseException 422 jika nomor batch bentrok.
+     * @throws HttpResponseException 422 jika batch obat yang sama punya expiry berbeda.
      */
     public function findOrCreateForReceipt(int $medicineId, string $batchNumber, string $expiryDate): Batch
     {
-        // Sengaja TIDAK memfilter medicine_id: bentrok antar obat tetap tertangkap.
-        $existing = Batch::query()->where('batch_number', $batchNumber)->first();
+        $existing = Batch::query()
+            ->where('medicine_id', $medicineId)
+            ->where('batch_number', $batchNumber)
+            ->first();
 
         if ($existing !== null) {
-            if ($existing->medicine_id !== $medicineId) {
-                throw new HttpResponseException(response()->json([
-                    'message' => "Nomor batch {$batchNumber} sudah dipakai untuk obat lain ({$existing->medicine?->name}); satu nomor batch tidak boleh dipakai dua obat.",
-                ], 422));
-            }
-
             $registeredExpiry = $existing->expiry_date?->toDateString();
 
             if ($registeredExpiry !== $expiryDate) {

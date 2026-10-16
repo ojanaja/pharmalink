@@ -35,7 +35,8 @@ class PurchaseReceiptService
             ]);
 
             foreach ($data['items'] as $item) {
-                // Guard identitas batch (termasuk bentrok antar obat) di BatchService.
+                // Guard identitas batch per (obat, nomor batch) di BatchService;
+                // nomor sama antar obat diizinkan (praktik supplier).
                 $batch = $this->batches->findOrCreateForReceipt(
                     $item['medicine_id'],
                     $item['batch_number'],

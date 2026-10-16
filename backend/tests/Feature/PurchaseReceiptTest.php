@@ -113,10 +113,10 @@ class PurchaseReceiptTest extends TestCase
         $this->assertSame(20, Batch::where('medicine_id', $medicine->id)->sole()->quantity_on_hand);
     }
 
-    public function test_batch_number_dipakai_obat_lain_ditolak(): void
+    public function test_nomor_batch_sama_antar_obat_diperbolehkan(): void
     {
-        // Regression A4-M4: nomor batch adalah identitas fisik; tidak boleh
-        // dipakai dua obat berbeda (bahkan dengan expiry sama).
+        // Revisi domain: satu nomor batch dari supplier boleh dipakai banyak
+        // obat dalam kiriman yang sama — bahkan dengan expiry berbeda.
         $medicine2 = Medicine::create([
             'code' => 'MED-002',
             'name' => 'Amoxicillin 500mg',
@@ -124,20 +124,28 @@ class PurchaseReceiptTest extends TestCase
             'unit_id' => Unit::create(['name' => 'Kapsul'])->id,
             'sale_price' => '12000.00',
         ]);
+        $medicine1 = $this->makeMedicine();
         $owner = User::factory()->create(['role' => Role::Owner]);
+        $token = $owner->createToken('api')->plainTextToken;
 
-        $this->withToken($owner->createToken('api')->plainTextToken)
-            ->postJson('/api/receipts', $this->payload($this->makeMedicine(), 'BTH-SHARED-001', '2027-01-01'))
+        // Obat 1: BATCH001 exp 2027-01-01; obat 2: BATCH001 exp 2027-06-01.
+        $this->withToken($token)
+            ->postJson('/api/receipts', $this->payload($medicine1, 'BATCH001', '2027-01-01'))
             ->assertCreated();
 
-        $response = $this->withToken($owner->createToken('api')->plainTextToken)
-            ->postJson('/api/receipts', $this->payload($medicine2, 'BTH-SHARED-001', '2027-12-31'));
-        $response->assertUnprocessable();
-        $this->assertStringContainsString('obat lain', (string) $response->json('message'));
+        $response = $this->withToken($token)
+            ->postJson('/api/receipts', $this->payload($medicine2, 'BATCH001', '2027-06-01'));
+        $response->assertCreated();
 
-        // Rollback total: batch obat 2 tidak tercipta, movement tetap satu.
-        $this->assertSame(1, Batch::count());
-        $this->assertSame(1, StockMovement::count());
+        // Dua batch terpisah per obat, expiry masing-masing benar.
+        // (medicine2 dibuat duluan -> id lebih kecil.)
+        $batches = Batch::query()->where('batch_number', 'BATCH001')->orderBy('medicine_id')->get();
+        $this->assertCount(2, $batches);
+        $this->assertSame($medicine2->id, $batches[0]->medicine_id);
+        $this->assertSame('2027-06-01', $batches[0]->expiry_date->toDateString());
+        $this->assertSame($medicine1->id, $batches[1]->medicine_id);
+        $this->assertSame('2027-01-01', $batches[1]->expiry_date->toDateString());
+        $this->assertSame(2, StockMovement::count());
     }
 
     public function test_expiry_tanggal_lampau_ditolak(): void
@@ -149,6 +157,22 @@ class PurchaseReceiptTest extends TestCase
             ->postJson('/api/receipts', $this->payload($medicine, 'BTH-X-001', now()->subDay()->format('Y-m-d')))
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['items.0.expiry_date']);
+    }
+
+    public function test_unit_cost_wajib_tanpanya_422(): void
+    {
+        $medicine = $this->makeMedicine();
+        $owner = User::factory()->create(['role' => Role::Owner]);
+
+        $payload = $this->payload($medicine);
+        unset($payload['items'][0]['unit_cost']);
+
+        $this->withToken($owner->createToken('api')->plainTextToken)
+            ->postJson('/api/receipts', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['items.0.unit_cost']);
+
+        $this->assertSame(0, StockMovement::count());
     }
 
     public function test_items_kosong_ditolak(): void

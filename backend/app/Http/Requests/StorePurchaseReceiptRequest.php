@@ -23,7 +23,9 @@ class StorePurchaseReceiptRequest extends FormRequest
             'items.*.batch_number' => ['required', 'string', 'max:100'],
             'items.*.expiry_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
-            'items.*.unit_cost' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
+            // Wajib: receipt manual tidak punya fallback harga (tidak seperti PO
+            // yang bisa mengambil pivot supplier). Kosong -> 422, bukan 500.
+            'items.*.unit_cost' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
         ];
     }
 }

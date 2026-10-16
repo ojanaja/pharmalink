@@ -25,7 +25,7 @@ const STATUS_FILTERS: Array<{ key: StatusFilter; label: string }> = [
 ]
 
 function statusKey(medicine: Medicine): string {
-  const stock = Number(medicine.stock_total)
+  const stock = Number(medicine.stock_total ?? 0)
   if (stock <= 0) return 'habis'
   if (stock <= medicine.min_stock) return 'menipis'
   return 'aman'
@@ -40,9 +40,9 @@ function medicineValue(medicine: Medicine, key: string): string | number | null 
     case 'category':
       return medicine.category?.name ?? null
     case 'stock':
-      return Number(medicine.stock_total)
+      return Number(medicine.stock_total ?? 0)
     case 'price':
-      return Number(medicine.sale_price)
+      return Number(medicine.sale_price ?? 0)
     case 'status':
       return statusKey(medicine)
     default:
@@ -65,6 +65,9 @@ export function MedicinesPage() {
       api<LaravelPaginated<Medicine>>(
         `/medicines?page=${page}&search=${encodeURIComponent(debouncedSearch)}`,
       ),
+    // Data stok cepat basi setelah impor/penerimaan — selalu segar saat tab kembali fokus.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   })
 
   // Sort & filter client-side — hanya berlaku untuk halaman data yang sedang tampil (paginasi per 15).
@@ -193,7 +196,7 @@ export function MedicinesPage() {
               )}
 
               {visible.map((medicine) => {
-                const stock = Number(medicine.stock_total)
+                const stock = Number(medicine.stock_total ?? 0)
                 const status = stockStatus(stock, medicine.min_stock)
                 return (
                   <tr

@@ -162,17 +162,17 @@ class MedicineImportService
                     $rowErrors[] = 'Tanggal Kedaluwarsa tidak boleh tanggal lampau.';
                 }
 
-                // Guard identitas batch (sama dengan penerimaan): nomor batch tidak
-                // boleh dipakai obat lain atau punya expiry berbeda.
-                if ($batchNumber !== '' && $expiry !== '' && Carbon::hasFormat($expiry, 'Y-m-d')) {
-                    $existing = Batch::query()->where('batch_number', $batchNumber)->first();
+                // Guard identitas batch per (obat, nomor batch), sama dengan penerimaan:
+                // nomor sama antar obat diizinkan; satu obat + nomor sama + expiry
+                // berbeda = error baris.
+                if ($batchNumber !== '' && $expiry !== '' && Carbon::hasFormat($expiry, 'Y-m-d') && $medicine !== null) {
+                    $existing = Batch::query()
+                        ->where('medicine_id', $medicine->id)
+                        ->where('batch_number', $batchNumber)
+                        ->first();
 
-                    if ($existing !== null) {
-                        if ($medicine === null || $existing->medicine_id !== $medicine->id) {
-                            $rowErrors[] = "Nomor batch {$batchNumber} sudah dipakai obat lain.";
-                        } elseif ($existing->expiry_date?->toDateString() !== $expiry) {
-                            $rowErrors[] = "Batch {$batchNumber} sudah terdaftar dengan tanggal kedaluwarsa {$existing->expiry_date?->toDateString()}.";
-                        }
+                    if ($existing !== null && $existing->expiry_date?->toDateString() !== $expiry) {
+                        $rowErrors[] = "Batch {$batchNumber} sudah terdaftar dengan tanggal kedaluwarsa {$existing->expiry_date?->toDateString()}.";
                     }
                 }
             }
