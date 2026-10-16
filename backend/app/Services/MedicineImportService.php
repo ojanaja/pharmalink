@@ -11,88 +11,110 @@ use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Shared\Date;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 
 /**
- * Impor XLSX obat + stok.
+ * Impor XLSX 2 sheet mengikuti template resmi pengguna:
  *
- * SEMANTIK (keputusan M9, dokumentasi): impor adalah PENYESUAIAN stok ke
- * angka fisik di file (opname-like), bukan penambahan. Obat di-upsert by
- * Kode; bila Stok Fisik > 0, saldo batch disesuaikan (delta = fisik − saldo)
- * lewat movement type adjustment ber-reference StockAdjustment. Kategori /
- * satuan di-match by nama case-insensitive, dibuat otomatis bila belum ada;
- * kolom keduanya wajib untuk obat BARU dan boleh kosong untuk obat existing
- * (nilai lama dipertahankan). Semua baris divalidasi dulu; ada error ->
- * 422 + TIDAK ADA yang diterapkan (all-or-nothing).
+ *   Sheet "Update Stock (Menu Persediaan)": mutasi stok per batch
+ *     (Stock Masuk / Stock Keluar ber-alasan, wajib persis satu terisi).
+ *   Sheet "Master Data Obat": upsert obat by Kode; kode kosong atau
+ *     "(Auto Generate)" membuat kode acak OBAT-XXXXXX.
+ *
+ * KEPUTUSAN DOMAIN:
+ * - Template tidak punya kolom kategori → obat baru selalu masuk kategori
+ *   "Umum" (auto-create bila belum ada).
+ * - Sheet Update Stock TIDAK membuat batch baru — batch harus sudah ada
+ *   (dibuik lewat penerimaan); template tak punya tanggal kedaluwarsa.
+ * - Dua fase: validasi SEMUA baris kedua sheet; ada error -> 422 dan
+ *   TIDAK ADA yang diterapkan (all-or-nothing); bersih -> satu transaction.
  */
 class MedicineImportService
 {
-    // Urutan kolom HARUS sama dengan template dan header file.
-    public const HEADERS = [
-        'Kode', 'Nama', 'Kategori', 'Satuan', 'Harga Jual',
-        'Stok Minimum', 'Stok Fisik', 'Nomor Batch', 'Tanggal Kedaluwarsa',
-    ];
+    private const SHEET_STOCK_HINT = 'Update Stock';
 
-    // Batas serial tanggal Excel yang wajar (tahun 1932–2078).
-    private const EXCEL_SERIAL_MIN = 30000;
+    private const SHEET_MASTER_HINT = 'Master Data';
 
-    private const EXCEL_SERIAL_MAX = 80000;
+    private const MASTER_HEADERS = ['Kode', 'Nama Obat', 'Satuan', 'Harga jual', 'Minimum stok'];
 
-    private const MSG_TGL_INVALID = 'Tanggal kedaluwarsa tidak valid — isi tanggal (contoh 2027-01-31).';
+    private const STOCK_HEADERS = ['Kode', 'Nama Obat', 'Nomor Batch', 'Stock Masuk', 'Stock Keluar', 'Keterangan'];
 
-    public function __construct(
-        protected StockService $stock,
-        protected BatchService $batches,
-    ) {
+    public function __construct(protected StockService $stock)
+    {
     }
 
     /**
-     * @return array{medicines_created: int, medicines_updated: int, batches_adjusted: int, movements_created: int, rows_processed: int}
+     * @return array{medicines_created: int, medicines_updated: int, stock_rows_applied: int, movements_created: int, rows_processed: int}
      *
-     * @throws HttpResponseException 422 dengan daftar error per baris.
+     * @throws HttpResponseException 422 dengan daftar error per sheet+baris.
      */
     public function import(UploadedFile $file, User $user): array
     {
-        $rows = $this->readRows($file);
+        $spreadsheet = IOFactory::load($file->getPathname());
 
-        $errors = $this->validateRows($rows);
-        if ($errors !== []) {
+        $masterRows = $this->sheetRows($spreadsheet, self::SHEET_MASTER_HINT);
+        $stockRows = $this->sheetRows($spreadsheet, self::SHEET_STOCK_HINT);
+
+        $errors = ['sheets' => [], 'rows' => []];
+
+        if ($masterRows === null) {
+            $errors['sheets'][] = 'Sheet "Master Data" tidak ditemukan dalam file.';
+        }
+        if ($stockRows === null) {
+            $errors['sheets'][] = 'Sheet "Update Stock" tidak ditemukan dalam file.';
+        }
+
+        $master = [];
+        $stock = [];
+
+        if ($errors['sheets'] === []) {
+            $master = $this->validateMaster($masterRows, $errors);
+            $stock = $this->validateStock($stockRows, $master, $errors);
+        }
+
+        if ($errors['sheets'] !== [] || $errors['rows'] !== []) {
             throw new HttpResponseException(response()->json([
                 'message' => 'Impor gagal validasi. Tidak ada perubahan yang diterapkan.',
-                'errors' => ['rows' => $errors],
+                'errors' => $errors,
             ], 422));
         }
 
-        return DB::transaction(function () use ($rows, $user) {
+        return DB::transaction(function () use ($master, $stock, $user) {
             $summary = [
                 'medicines_created' => 0,
                 'medicines_updated' => 0,
-                'batches_adjusted' => 0,
+                'stock_rows_applied' => 0,
                 'movements_created' => 0,
-                'rows_processed' => count($rows),
+                'rows_processed' => count($master) + count($stock),
             ];
 
-            foreach ($rows as $row) {
-                $this->applyRow($row, $user, $summary);
-            }
+            // Master dulu agar obat baru bisa langsung dipakai sheet Update Stock.
+            $medicineIds = $this->applyMaster($master, $summary);
+            $this->applyStock($stock, $medicineIds, $user, $summary);
 
             return $summary;
         });
     }
 
     /**
-     * Baca sheet pertama jadi array baris; header (baris 1) dan baris kosong dibuang.
+     * Cari sheet by judul (toleran ejaan: mengandung hint, case-insensitive).
+     * Null bila tidak ada; array baris (header dibuang, baris kosong dibuang).
      *
-     * @return array<int, array<int, mixed>> index 0 = baris data pertama (sheet row 2)
+     * @return array<int, array<int, mixed>>|null
      */
-    protected function readRows(UploadedFile $file): array
+    protected function sheetRows(Spreadsheet $spreadsheet, string $hint): ?array
     {
-        $sheet = IOFactory::load($file->getPathname())->getActiveSheet();
-        $data = $sheet->toArray(null, true, false, false); // formatData=false: angka tetap numerik, tanggal = serial Excel
+        $sheet = collect($spreadsheet->getAllSheets())
+            ->first(fn ($s) => str_contains(strtolower($s->getTitle()), strtolower($hint)));
 
+        if ($sheet === null) {
+            return null;
+        }
+
+        $data = $sheet->toArray(null, true, false, false);
         array_shift($data); // header
 
         return array_values(array_filter($data, fn ($row) => collect($row)->contains(
@@ -101,189 +123,273 @@ class MedicineImportService
     }
 
     /**
-     * Fase 1 — validasi seluruh baris. Mengembalikan daftar error per baris
-     * (nomor baris = nomor baris asli di sheet, header = baris 1).
+     * Fase 1a — validasi sheet Master Data Obat.
      *
      * @param  array<int, array<int, mixed>>  $rows
-     * @return array<int, array{row: int, errors: array<int, string>}>
+     * @param  array{sheets: array<int, string>, rows: array<int, mixed>}  $errors
+     * @return array<int, array{kode: string, auto: bool, nama: string, satuan: string, harga: string, min_stock: int}>
      */
-    protected function validateRows(array $rows): array
+    protected function validateMaster(array $rows, array &$errors): array
     {
-        $errors = [];
+        $result = [];
         $seenCodes = [];
 
         foreach ($rows as $index => $row) {
-            $sheetRow = $index + 2; // header di baris 1
+            $sheetRow = $index + 2;
             $rowErrors = [];
 
             $kode = $this->str($row[0] ?? null);
+            $auto = $kode === '' || strcasecmp($kode, '(Auto Generate)') === 0;
             $nama = $this->str($row[1] ?? null);
-            $kategori = $this->str($row[2] ?? null);
-            $satuan = $this->str($row[3] ?? null);
-            $harga = $this->normalizeNumber($row[4] ?? null);
-            $minStock = $this->normalizeNumber($row[5] ?? null);
-            $stokFisik = $this->normalizeNumber($row[6] ?? null);
-            $batchNumber = $this->str($row[7] ?? null);
-            $expiry = $this->normalizeExpiry($row[8] ?? null);
+            $satuan = $this->str($row[2] ?? null);
+            $harga = $this->normalizeNumber($row[3] ?? null);
+            $minStock = $this->normalizeNumber($row[4] ?? null);
 
-            if ($kode === '') {
-                $rowErrors[] = 'Kode wajib diisi.';
-            } elseif (isset($seenCodes[$kode])) {
-                $rowErrors[] = "Kode {$kode} duplikat dalam file.";
-            } else {
-                $seenCodes[$kode] = true;
+            if (! $auto) {
+                if (isset($seenCodes[$kode])) {
+                    $rowErrors[] = "Kode {$kode} duplikat dalam sheet Master Data.";
+                } else {
+                    $seenCodes[$kode] = true;
+                }
             }
 
             if ($nama === '') {
-                $rowErrors[] = 'Nama wajib diisi.';
+                $rowErrors[] = 'Nama Obat wajib diisi.';
+            }
+
+            $medicine = ! $auto && $kode !== '' ? Medicine::query()->where('code', $kode)->first() : null;
+
+            // Satuan wajib untuk obat baru (master sheet selalu punya kolomnya).
+            if ($medicine === null && $satuan === '') {
+                $rowErrors[] = 'Satuan wajib diisi untuk obat baru.';
+            }
+
+            if (! is_numeric($harga) || (float) $harga < 0) {
+                $rowErrors[] = 'Harga jual wajib berupa angka >= 0.';
+            }
+
+            if (! $this->isInt($minStock) || (int) $minStock < 0) {
+                $rowErrors[] = 'Minimum stok harus bilangan bulat >= 0.';
+            }
+
+            if ($rowErrors !== []) {
+                $errors['rows'][] = ['sheet' => 'Master Data', 'row' => $sheetRow, 'errors' => $rowErrors];
+            } else {
+                $result[] = [
+                    'kode' => $kode,
+                    'auto' => $auto,
+                    'nama' => $nama,
+                    'satuan' => $satuan,
+                    'harga' => number_format((float) $harga, 2, '.', ''),
+                    'min_stock' => $this->isInt($minStock) ? (int) $minStock : 0,
+                ];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Fase 1b — validasi sheet Update Stock. Obat boleh berasal dari DB atau
+     * dari sheet Master dalam file yang sama (hanya untuk kode eksplisit).
+     *
+     * @param  array<int, array<int, mixed>>  $rows
+     * @param  array<int, array{kode: string, auto: bool}>  $master
+     * @param  array{sheets: array<int, string>, rows: array<int, mixed>}  $errors
+     * @return array<int, array{kode: string, batch_number: string, masuk: int, keluar: int, keterangan: string}>
+     */
+    protected function validateStock(array $rows, array $master, array &$errors): array
+    {
+        // Kode eksplisit yang dibuat/diupdate sheet Master dalam file ini.
+        $masterCodes = collect($master)->where('auto', false)->pluck('kode')->all();
+
+        $result = [];
+
+        foreach ($rows as $index => $row) {
+            $sheetRow = $index + 2;
+            $rowErrors = [];
+
+            $kode = $this->str($row[0] ?? null);
+            $batchNumber = $this->str($row[2] ?? null);
+            $masuk = $this->normalizeNumber($row[3] ?? null);
+            $keluar = $this->normalizeNumber($row[4] ?? null);
+            $keterangan = $this->str($row[5] ?? null);
+
+            if ($kode === '') {
+                $rowErrors[] = 'Kode wajib diisi.';
             }
 
             $medicine = $kode !== '' ? Medicine::query()->where('code', $kode)->first() : null;
 
-            // Kategori/satuan: wajib untuk obat baru, opsional untuk existing.
-            if ($medicine === null && ($kategori === '' || $satuan === '')) {
-                $rowErrors[] = 'Kategori dan Satuan wajib diisi untuk obat baru.';
+            if ($kode !== '' && $medicine === null && ! in_array($kode, $masterCodes, true)) {
+                $rowErrors[] = "Kode obat {$kode} tidak ditemukan.";
             }
 
-            if (! is_numeric($harga) || (float) $harga < 0) {
-                $rowErrors[] = 'Harga Jual wajib berupa angka >= 0.';
+            if ($batchNumber === '') {
+                $rowErrors[] = 'Nomor Batch wajib diisi.';
             }
 
-            if (! $this->isInt($minStock) || (int) $minStock < 0) {
-                $rowErrors[] = 'Stok Minimum harus bilangan bulat >= 0.';
+            $masukQty = $this->isInt($masuk) && is_numeric($masuk) ? (int) $masuk : 0;
+            $keluarQty = $this->isInt($keluar) && is_numeric($keluar) ? (int) $keluar : 0;
+
+            if ($masukQty > 0 && $keluarQty > 0) {
+                $rowErrors[] = 'Isi salah satu saja: Stock Masuk atau Stock Keluar.';
+            } elseif ($masukQty <= 0 && $keluarQty <= 0) {
+                $rowErrors[] = 'Stock Masuk atau Stock Keluar wajib diisi (salah satu).';
             }
 
-            if (! $this->isInt($stokFisik) || (int) $stokFisik < 0) {
-                $rowErrors[] = 'Stok Fisik harus bilangan bulat >= 0.';
+            if (! $this->isInt($masuk) || (int) $masuk < 0 || ! $this->isInt($keluar) || (int) $keluar < 0) {
+                $rowErrors[] = 'Stock Masuk/Keluar harus bilangan bulat >= 0.';
             }
 
-            $fisik = $this->isInt($stokFisik) ? (int) $stokFisik : 0;
+            if (mb_strlen($keterangan) < 5) {
+                $rowErrors[] = 'Keterangan wajib diisi (minimal 5 karakter).';
+            }
 
-            if ($fisik > 0) {
-                if ($batchNumber === '') {
-                    $rowErrors[] = 'Nomor Batch wajib diisi bila Stok Fisik > 0.';
-                }
+            // Batch wajib sudah ada; template tidak punya tanggal kedaluwarsa
+            // sehingga batch baru tidak bisa dibuat dari sini.
+            if ($medicine !== null && $batchNumber !== '') {
+                $batch = Batch::query()
+                    ->where('medicine_id', $medicine->id)
+                    ->where('batch_number', $batchNumber)
+                    ->first();
 
-                if ($expiry === null || ! Carbon::hasFormat($expiry, 'Y-m-d')) {
-                    $rowErrors[] = self::MSG_TGL_INVALID;
-                } elseif (Carbon::createFromFormat('Y-m-d', $expiry)->isBefore(today())) {
-                    $rowErrors[] = 'Tanggal Kedaluwarsa tidak boleh tanggal lampau.';
-                }
-
-                // Guard identitas batch per (obat, nomor batch), sama dengan penerimaan:
-                // nomor sama antar obat diizinkan; satu obat + nomor sama + expiry
-                // berbeda = error baris.
-                if ($batchNumber !== '' && $expiry !== null && Carbon::hasFormat($expiry, 'Y-m-d') && $medicine !== null) {
-                    $existing = Batch::query()
-                        ->where('medicine_id', $medicine->id)
-                        ->where('batch_number', $batchNumber)
-                        ->first();
-
-                    if ($existing !== null && $existing->expiry_date?->toDateString() !== $expiry) {
-                        $rowErrors[] = "Batch {$batchNumber} sudah terdaftar dengan tanggal kedaluwarsa {$existing->expiry_date?->toDateString()}.";
-                    }
+                if ($batch === null) {
+                    $rowErrors[] = "Nomor batch {$batchNumber} untuk obat {$kode} tidak ditemukan.";
+                } elseif ($keluarQty > 0 && $keluarQty > $batch->quantity_on_hand) {
+                    $rowErrors[] = "Stok tidak cukup untuk batch {$batchNumber} (tersedia {$batch->quantity_on_hand}).";
                 }
             }
 
             if ($rowErrors !== []) {
-                $errors[] = ['row' => $sheetRow, 'errors' => $rowErrors];
+                $errors['rows'][] = ['sheet' => 'Update Stock', 'row' => $sheetRow, 'errors' => $rowErrors];
+            } else {
+                $result[] = [
+                    'kode' => $kode,
+                    'batch_number' => $batchNumber,
+                    'masuk' => $masukQty,
+                    'keluar' => $keluarQty,
+                    'keterangan' => $keterangan,
+                ];
             }
         }
 
-        return $errors;
+        return $result;
     }
 
     /**
-     * Fase 2 — terapkan satu baris (dipanggil hanya bila validasi bersih).
+     * Fase 2a — upsert obat; return peta kode => medicine id.
      *
-     * @param  array<int, mixed>  $row
+     * @param  array<int, array{kode: string, auto: bool, nama: string, satuan: string, harga: string, min_stock: int}>  $master
+     * @param  array<string, int>  $summary
+     * @return array<string, int>
+     */
+    protected function applyMaster(array $master, array &$summary): array
+    {
+        // Kategori default template (tidak ada kolom kategori di template resmi).
+        $umumId = Category::query()->firstOrCreate(['name' => 'Umum'])->id;
+
+        $map = [];
+        $usedCodes = [];
+
+        foreach ($master as $row) {
+            $kode = $row['kode'];
+
+            if ($row['auto']) {
+                $kode = $this->generateCode($usedCodes);
+            }
+
+            $medicine = Medicine::query()->where('code', $kode)->first();
+
+            if ($medicine === null) {
+                $medicine = Medicine::create([
+                    'code' => $kode,
+                    'name' => $row['nama'],
+                    'category_id' => $umumId,
+                    'unit_id' => $this->unitId($row['satuan']),
+                    'sale_price' => $row['harga'],
+                    'min_stock' => $row['min_stock'],
+                ]);
+                $summary['medicines_created']++;
+            } else {
+                $medicine->name = $row['nama'];
+                $medicine->sale_price = $row['harga'];
+                $medicine->min_stock = $row['min_stock'];
+                if ($row['satuan'] !== '') {
+                    $medicine->unit_id = $this->unitId($row['satuan']);
+                }
+                $medicine->save();
+                $summary['medicines_updated']++;
+            }
+
+            $map[$kode] = $medicine->id;
+        }
+
+        return $map;
+    }
+
+    /**
+     * Fase 2b — mutasi stok per baris Update Stock.
+     *
+     * @param  array<int, array{kode: string, batch_number: string, masuk: int, keluar: int, keterangan: string}>  $stock
+     * @param  array<string, int>  $medicineIds
      * @param  array<string, int>  $summary
      */
-    protected function applyRow(array $row, User $user, array &$summary): void
+    protected function applyStock(array $stock, array $medicineIds, User $user, array &$summary): void
     {
-        $kode = $this->str($row[0]);
-        $nama = $this->str($row[1]);
-        $kategori = $this->str($row[2]);
-        $satuan = $this->str($row[3]);
-        $harga = number_format((float) $row[4], 2, '.', '');
-        $minStock = $this->isInt($row[5] ?? null) ? (int) $row[5] : 0;
-        $fisik = $this->isInt($row[6] ?? null) ? (int) $row[6] : 0;
+        foreach ($stock as $row) {
+            // Obat bisa berasal dari sheet Master file ini atau sudah ada di DB.
+            $medicineId = $medicineIds[$row['kode']]
+                ?? Medicine::query()->where('code', $row['kode'])->value('id');
 
-        $medicine = Medicine::query()->where('code', $kode)->first();
+            $batch = Batch::query()
+                ->where('medicine_id', $medicineId)
+                ->where('batch_number', $row['batch_number'])
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        if ($medicine === null) {
-            $medicine = Medicine::create([
-                'code' => $kode,
-                'name' => $nama,
-                'category_id' => $this->categoryId($kategori),
-                'unit_id' => $this->unitId($satuan),
-                'sale_price' => $harga,
-                'min_stock' => $minStock,
+            $delta = $row['masuk'] > 0 ? $row['masuk'] : -$row['keluar'];
+            $reason = 'Impor: '.$row['keterangan'];
+
+            $adjustment = StockAdjustment::create([
+                'medicine_id' => $batch->medicine_id,
+                'batch_id' => $batch->id,
+                'quantity' => $delta,
+                'reason' => $reason,
+                'user_id' => $user->id,
             ]);
-            $summary['medicines_created']++;
-        } else {
-            $medicine->name = $nama;
-            $medicine->sale_price = $harga;
-            $medicine->min_stock = $minStock;
-            if ($kategori !== '') {
-                $medicine->category_id = $this->categoryId($kategori);
+
+            if ($delta > 0) {
+                $this->stock->add($batch, $delta, MovementType::Adjustment, $adjustment, $reason);
+            } else {
+                $this->stock->deduct($batch, abs($delta), MovementType::Adjustment, $adjustment, $reason);
             }
-            if ($satuan !== '') {
-                $medicine->unit_id = $this->unitId($satuan);
-            }
-            $medicine->save();
-            $summary['medicines_updated']++;
+
+            $summary['stock_rows_applied']++;
+            $summary['movements_created']++;
         }
+    }
 
-        if ($fisik <= 0) {
-            return;
-        }
+    /**
+     * Kode acak OBAT-XXXXXX; retry bila bentrok dengan DB atau kode dalam file.
+     *
+     * @param  array<string, true>  $usedCodes
+     */
+    protected function generateCode(array &$usedCodes): string
+    {
+        do {
+            $code = 'OBAT-'.strtoupper(Str::random(6));
+        } while (isset($usedCodes[$code]) || Medicine::query()->where('code', $code)->exists());
 
-        $batch = $this->batches->findOrCreateForReceipt(
-            $medicine->id,
-            $this->str($row[7]),
-            // Tanggal serial Excel dinormalkan sama seperti fase validasi.
-            $this->normalizeExpiry($row[8] ?? null) ?? $this->str($row[8] ?? null),
-        );
+        $usedCodes[$code] = true;
 
-        // Kunci batch saat baca saldo agar dua impor paralel tidak saling menimpa delta.
-        $batch = Batch::query()->whereKey($batch->id)->lockForUpdate()->firstOrFail();
-
-        $delta = $fisik - $batch->quantity_on_hand;
-
-        if ($delta === 0) {
-            return;
-        }
-
-        $adjustment = StockAdjustment::create([
-            'medicine_id' => $medicine->id,
-            'batch_id' => $batch->id,
-            'quantity' => $delta,
-            'reason' => 'Impor XLSX',
-            'user_id' => $user->id,
-        ]);
-
-        $type = MovementType::Adjustment;
-        if ($delta > 0) {
-            $this->stock->add($batch, $delta, $type, $adjustment, 'Impor XLSX');
-        } else {
-            $this->stock->deduct($batch, abs($delta), $type, $adjustment, 'Impor XLSX');
-        }
-
-        $summary['batches_adjusted']++;
-        $summary['movements_created']++;
+        return $code;
     }
 
     /**
      * Match by nama case-insensitive (LIKE tanpa wildcard); buat master baru
      * bila belum ada.
      */
-    protected function categoryId(string $name): int
-    {
-        return Category::query()->where('name', 'like', $name)->first()?->id
-            ?? Category::create(['name' => $name])->id;
-    }
-
     protected function unitId(string $name): int
     {
         return Unit::query()->where('name', 'like', $name)->first()?->id
@@ -293,26 +399,6 @@ class MedicineImportService
     protected function str(mixed $cell): string
     {
         return $cell === null ? '' : trim((string) $cell);
-    }
-
-    /**
-     * Sel tanggal: angka serial Excel (dengan format ribuan/tanggal di Excel)
-     * dikonversi ke Y-m-d; string dipakai apa adanya. Null = kosong atau
-     * serial di luar rentang wajar — menjadi error baris yang jelas.
-     */
-    protected function normalizeExpiry(mixed $cell): ?string
-    {
-        if (is_int($cell) || is_float($cell)) {
-            if ($cell >= self::EXCEL_SERIAL_MIN && $cell <= self::EXCEL_SERIAL_MAX) {
-                return Date::excelToDateTimeObject($cell)->format('Y-m-d');
-            }
-
-            return null;
-        }
-
-        $s = $this->str($cell);
-
-        return $s === '' ? null : $s;
     }
 
     /**

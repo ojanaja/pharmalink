@@ -15,7 +15,7 @@ interface RowError {
 interface ImportSummary {
   medicines_created: number
   medicines_updated: number
-  batches_adjusted: number
+  stock_rows_applied: number
   movements_created: number
   rows_processed: number
 }
@@ -173,14 +173,17 @@ export function ImportMedicinesModal({ open, onClose, onImported }: ImportMedici
           <ul className="grid grid-cols-2 gap-2 text-[13px] text-ink-secondary">
             <li>Obat baru: {summary.medicines_created}</li>
             <li>Obat diperbarui: {summary.medicines_updated}</li>
-            <li>Batch disesuaikan: {summary.batches_adjusted}</li>
+            <li>Baris stok diterapkan: {summary.stock_rows_applied}</li>
             <li>Mutasi stok dibuat: {summary.movements_created}</li>
           </ul>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
           <p className="text-[13px] text-ink-secondary">
-            Unduh template, isi data obat dan batch, lalu unggah kembali. Berkas XLSX maksimal 2 MB.
+            Template berisi 2 sheet: <span className="font-semibold text-ink">Master Data Obat</span>{' '}
+            (tambah/ubah obat; kode bisa diisi "(Auto Generate)") dan{' '}
+            <span className="font-semibold text-ink">Update Stock</span> (mutasi masuk/keluar per nomor
+            batch yang sudah terdaftar). Unduh, isi, lalu unggah kembali. Berkas XLSX maksimal 2 MB.
           </p>
 
           <Button

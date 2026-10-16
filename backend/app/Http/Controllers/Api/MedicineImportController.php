@@ -17,25 +17,31 @@ class MedicineImportController extends Controller
     }
 
     /**
-     * Unduh template XLSX dengan header persis sesuai kontrak impor.
+     * Unduh template XLSX 2 sheet persis format resmi pengguna.
      */
     public function template(): Response
     {
-        $sheet = (new Spreadsheet())->getActiveSheet();
-        $sheet->fromArray(MedicineImportService::HEADERS, null, 'A1');
+        $spreadsheet = new Spreadsheet();
 
-        // Satu baris contoh; tanggal kedaluwarsa contoh = satu tahun dari hari ini.
-        $sheet->fromArray([[
-            'OBT-001', 'Paracetamol 500mg', 'Obat Bebas', 'Strip',
-            3000, 10, 100, 'BTH-001', now()->addYear()->toDateString(),
-        ]], null, 'A2');
+        $stock = $spreadsheet->getActiveSheet();
+        $stock->setTitle('Update Stock (Menu Persediaan)');
+        $stock->fromArray(['Kode', 'Nama Obat', 'Nomor Batch', 'Stock Masuk', 'Stock Keluar', 'Keterangan'], null, 'A1');
+        $stock->fromArray([['OBAT-PCT', 'Paracetamol 500mg', 'BTH-PCT-001', 50, null, 'Stok awal impor']], null, 'A2');
+        $stock->getStyle('A1')->getFont()->setBold(true);
 
-        $sheet->getStyle('A1')->getFont()->setBold(true);
-        foreach (range('A', 'I') as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
+        $master = $spreadsheet->createSheet();
+        $master->setTitle('Master Data Obat');
+        $master->fromArray(['Kode', 'Nama Obat', 'Satuan', 'Harga jual', 'Minimum stok'], null, 'A1');
+        $master->fromArray([['(Auto Generate)', 'Vitamin D3 1000IU', 'Tablet', 15000, 10]], null, 'A2');
+        $master->getStyle('A1')->getFont()->setBold(true);
+
+        foreach ([$stock, $master] as $sheet) {
+            foreach (range('A', 'F') as $col) {
+                $sheet->getColumnDimension($col)->setAutoSize(true);
+            }
         }
 
-        $writer = new Xlsx($sheet->getParent());
+        $writer = new Xlsx($spreadsheet);
         ob_start();
         $writer->save('php://output');
         $content = ob_get_clean();

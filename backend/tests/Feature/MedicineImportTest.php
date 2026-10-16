@@ -10,7 +10,7 @@ use App\Models\StockAdjustment;
 use App\Models\StockMovement;
 use App\Models\Unit;
 use App\Models\User;
-use App\Services\MedicineImportService;
+use App\Services\PurchaseReceiptService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -22,169 +22,227 @@ class MedicineImportTest extends TestCase
 {
     use RefreshDatabase;
 
-    private User $apoteker;
+    private User $owner;
 
-    private Category $category;
+    private Medicine $existing;
 
-    private Unit $unit;
+    private Batch $batch;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        // Impor = mutasi master data (M1 review): hanya owner.
-        $this->apoteker = User::factory()->create(['role' => Role::Owner]);
-        $this->category = Category::create(['name' => 'Obat Bebas']);
-        $this->unit = Unit::create(['name' => 'Strip']);
+        // Impor = mutasi master data: hanya owner.
+        $this->owner = User::factory()->create(['role' => Role::Owner]);
+
+        $category = Category::create(['name' => 'Obat Bebas']);
+        $unit = Unit::create(['name' => 'Strip']);
+
+        $this->existing = Medicine::create([
+            'code' => 'OBAT-PCT', 'name' => 'Paracetamol 500mg',
+            'category_id' => $category->id, 'unit_id' => $unit->id,
+            'sale_price' => '3000.00', 'min_stock' => 10,
+        ]);
+
+        // Batch existing untuk sheet Update Stock (stok awal 20).
+        $receipt = app(PurchaseReceiptService::class)->create([
+            'items' => [[
+                'medicine_id' => $this->existing->id,
+                'batch_number' => 'BTH-PCT-001',
+                'expiry_date' => now()->addYear()->toDateString(),
+                'quantity' => 20,
+                'unit_cost' => '1800.00',
+            ]],
+        ], $this->owner);
+
+        $this->batch = $this->existing->batches()->sole();
     }
 
     private function token(): string
     {
-        return $this->apoteker->createToken('api')->plainTextToken;
+        return $this->owner->createToken('api')->plainTextToken;
     }
 
     /**
-     * Buat file XLSX temporer dari baris data (header otomatis).
+     * Fixture XLSX 2 sheet sesuai template resmi.
+     *
+     * @param  array<int, array<int, mixed>>  $masterRows baris data sheet Master Data
+     * @param  array<int, array<int, mixed>>  $stockRows baris data sheet Update Stock
      */
-    private function xlsxFile(array $dataRows, string $name = 'obat.xlsx'): UploadedFile
+    private function xlsxFile(array $masterRows, array $stockRows, string $name = 'impor.xlsx'): UploadedFile
     {
-        $sheet = (new Spreadsheet())->getActiveSheet();
-        $sheet->fromArray(MedicineImportService::HEADERS, null, 'A1');
-        $sheet->fromArray($dataRows, null, 'A2');
+        $spreadsheet = new Spreadsheet();
+
+        $stock = $spreadsheet->getActiveSheet();
+        $stock->setTitle('Update Stock (Menu Persediaan)');
+        $stock->fromArray(['Kode', 'Nama Obat', 'Nomor Batch', 'Stock Masuk', 'Stock Keluar', 'Keterangan'], null, 'A1');
+        $stock->fromArray($stockRows, null, 'A2');
+
+        $master = $spreadsheet->createSheet();
+        $master->setTitle('Master Data Obat');
+        $master->fromArray(['Kode', 'Nama Obat', 'Satuan', 'Harga jual', 'Minimum stok'], null, 'A1');
+        $master->fromArray($masterRows, null, 'A2');
 
         $path = tempnam(sys_get_temp_dir(), 'xlsx');
-        (new Xlsx($sheet->getParent()))->save($path);
+        (new Xlsx($spreadsheet))->save($path);
 
         return new UploadedFile($path, $name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
     }
 
-    private function validRow(array $overrides = []): array
-    {
-        // array_replace (bukan array_merge — kunci numerik tidak ditimpa merge).
-        return array_values(array_replace([
-            'MED-100', 'Vitamin D3', 'Obat Bebas', 'Strip', 15000, 10, 50, 'BTH-IMP-001', now()->addYear()->toDateString(),
-        ], $overrides));
-    }
-
-    public function test_template_terdownload_dengan_header_dan_contoh(): void
+    public function test_template_terdownload_dua_sheet_dengan_header_benar(): void
     {
         $response = $this->withToken($this->token())
             ->getJson('/api/medicines/import/template')
             ->assertOk();
 
-        $this->assertStringStartsWith(
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            (string) $response->headers->get('Content-Type')
-        );
         $this->assertStringContainsString('template-obat.xlsx', (string) $response->headers->get('Content-Disposition'));
 
         $path = tempnam(sys_get_temp_dir(), 'tpl');
         file_put_contents($path, $response->getContent());
-        $sheet = IOFactory::load($path)->getActiveSheet();
+        $spreadsheet = IOFactory::load($path);
 
-        $headers = array_map(fn (string $col) => $sheet->getCell("{$col}1")->getValue(), range('A', 'I'));
-        $this->assertSame(MedicineImportService::HEADERS, $headers);
-        $this->assertSame('OBT-001', $sheet->getCell('A2')->getValue());
+        $titles = collect($spreadsheet->getAllSheets())->map->getTitle()->all();
+        $this->assertContains('Update Stock (Menu Persediaan)', $titles);
+        $this->assertContains('Master Data Obat', $titles);
+
+        $master = $spreadsheet->getSheetByName('Master Data Obat');
+        $this->assertSame('Kode', $master->getCell('A1')->getValue());
+        $this->assertSame('(Auto Generate)', $master->getCell('A2')->getValue());
+
+        $stock = $spreadsheet->getSheetByName('Update Stock (Menu Persediaan)');
+        $this->assertSame('Nomor Batch', $stock->getCell('C1')->getValue());
+        $this->assertSame('Keterangan', $stock->getCell('F1')->getValue());
     }
 
-    public function test_impor_valid_obat_baru_dan_existing(): void
+    public function test_impor_lengkap_dua_sheet_sukses(): void
     {
-        // Obat existing dengan batch ber-saldo 20.
-        $existing = Medicine::create([
-            'code' => 'MED-001', 'name' => 'Paracetamol 500mg',
-            'category_id' => $this->category->id, 'unit_id' => $this->unit->id,
-            'sale_price' => '3000.00', 'min_stock' => 5,
-        ]);
-        $batch = $existing->batches()->create([
-            'batch_number' => 'BTH-OLD-001', 'expiry_date' => now()->addYear()->toDateString(),
-            'quantity_on_hand' => 20,
-        ]);
+        $masterRows = [
+            ['', 'Vitamin D3 1000IU', 'Tablet', 15000, 10],      // kode auto-generate
+            ['OBAT-PCT', 'Paracetamol 500mg', '', 3500, 15],     // update obat existing
+        ];
+        $stockRows = [
+            ['OBAT-PCT', 'Paracetamol 500mg', 'BTH-PCT-001', 10, null, 'Penyesuaian stok opname'],
+            ['OBAT-PCT', 'Paracetamol 500mg', 'BTH-PCT-001', null, 5, 'Barang rusak kemasan'],
+        ];
 
-        $file = $this->xlsxFile([
-            $this->validRow(), // obat baru + batch baru 50
-            ['MED-001', 'Paracetamol 500mg', 'Obat Bebas', 'Strip', 3500, 10, 35, 'BTH-OLD-001', $batch->expiry_date->toDateString()],
-        ]);
+        $file = $this->xlsxFile($masterRows, $stockRows);
 
         $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
         $response->assertOk();
 
         $summary = $response->json('data');
-        $this->assertSame(2, $summary['rows_processed']);
+        $this->assertSame(4, $summary['rows_processed']);
         $this->assertSame(1, $summary['medicines_created']);
         $this->assertSame(1, $summary['medicines_updated']);
-        $this->assertSame(2, $summary['batches_adjusted']);
+        $this->assertSame(2, $summary['stock_rows_applied']);
         $this->assertSame(2, $summary['movements_created']);
 
-        // Obat baru tercipta beserta batch 50.
-        $newMedicine = Medicine::where('code', 'MED-100')->sole();
+        // Obat baru: kode OBAT-XXXXXX, kategori default Umum, satuan baru terbuat.
+        $newMedicine = Medicine::where('code', 'like', 'OBAT-%')->where('code', '!=', 'OBAT-PCT')->sole();
+        $this->assertMatchesRegularExpression('/^OBAT-[A-Z0-9]{6}$/', $newMedicine->code);
+        $this->assertSame('Umum', $newMedicine->category->name);
+        $this->assertSame('Tablet', $newMedicine->unit->name);
         $this->assertSame('15000.00', (string) $newMedicine->sale_price);
-        $this->assertSame(50, $newMedicine->batches()->sole()->quantity_on_hand);
 
-        // Obat existing ter-update + batch lama disesuaikan 20 -> 35.
-        $this->assertSame('3500.00', (string) $existing->fresh()->sale_price);
-        $this->assertSame(35, $batch->fresh()->quantity_on_hand);
+        // Obat existing ter-update.
+        $this->assertSame('3500.00', (string) $this->existing->fresh()->sale_price);
+        $this->assertSame(15, $this->existing->fresh()->min_stock);
 
-        // Kedua perubahan lewat movement adjustment ber-reason "Impor XLSX".
+        // Mutasi stok: 20 + 10 - 5 = 25; movement adjustment dengan reason "Impor: ...".
+        $this->assertSame(25, $this->batch->fresh()->quantity_on_hand);
+
         $movements = StockMovement::where('type', 'adjustment')->orderBy('id')->get();
-        $this->assertCount(2, $movements);
-        $this->assertSame([50, 15], $movements->pluck('quantity')->all());
-        $this->assertSame('Impor XLSX', $movements->first()->reason);
+        $this->assertSame([10, -5], $movements->pluck('quantity')->all());
+        $this->assertSame('Impor: Penyesuaian stok opname', $movements->first()->reason);
         $this->assertSame('StockAdjustment', $movements->first()->reference_type);
         $this->assertSame(2, StockAdjustment::count());
     }
 
-    public function test_impor_delta_nol_tidak_menulis_movement(): void
+    public function test_batch_tidak_ditemukan_422_jelas(): void
     {
-        $existing = Medicine::create([
-            'code' => 'MED-001', 'name' => 'Paracetamol 500mg',
-            'category_id' => $this->category->id, 'unit_id' => $this->unit->id,
-            'sale_price' => '3000.00',
-        ]);
-        $batch = $existing->batches()->create([
-            'batch_number' => 'BTH-OLD-001', 'expiry_date' => now()->addYear()->toDateString(),
-            'quantity_on_hand' => 20,
-        ]);
-
-        // Stok fisik di file = saldo saat ini -> delta 0 -> skip.
-        $file = $this->xlsxFile([
-            ['MED-001', 'Paracetamol 500mg', '', '', 3000, 0, 20, 'BTH-OLD-001', $batch->expiry_date->toDateString()],
-        ]);
-
-        $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file])->assertOk();
-
-        $this->assertSame(0, StockMovement::count());
-        $this->assertSame(0, StockAdjustment::count());
-    }
-
-    public function test_impor_error_daftar_baris_dan_rollback_total(): void
-    {
-        $medicinesBefore = Medicine::count();
-
-        // Baris data 1 valid, baris 2 nama kosong (sheet row 3),
-        // baris 3 expiry lampau (sheet row 4), baris 4 duplikat kode (sheet row 5).
-        $file = $this->xlsxFile([
-            $this->validRow(),
-            ['MED-101', '', 'Obat Bebas', 'Strip', 5000, 0, 0, '', ''],
-            $this->validRow(['MED-102', 'Vitamin E', 'Obat Bebas', 'Strip', 5000, 0, 5, 'BTH-EXP', now()->subDay()->toDateString()]),
-            $this->validRow(), // duplikat kode MED-100
+        $file = $this->xlsxFile([], [
+            ['OBAT-PCT', 'Paracetamol 500mg', 'BTH-TIDAK-ADA', 5, null, 'Coba tambah stok'],
         ]);
 
         $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
         $response->assertUnprocessable();
 
-        $rows = collect($response->json('errors.rows'))->keyBy('row');
-        $this->assertArrayHasKey(3, $rows->toArray());
-        $this->assertStringContainsString('Nama wajib', $rows[3]['errors'][0]);
-        $this->assertArrayHasKey(4, $rows->toArray());
-        $this->assertStringContainsString('lampau', $rows[4]['errors'][0]);
-        $this->assertArrayHasKey(5, $rows->toArray());
-        $this->assertStringContainsString('duplikat', $rows[5]['errors'][0]);
+        $error = $response->json('errors.rows.0');
+        $this->assertSame('Update Stock', $error['sheet']);
+        $this->assertStringContainsString('tidak ditemukan', $error['errors'][0]);
+        $this->assertStringContainsString('BTH-TIDAK-ADA', $error['errors'][0]);
 
-        // Rollback total: tidak ada perubahan sama sekali.
-        $this->assertSame($medicinesBefore, Medicine::count());
-        $this->assertSame(0, StockMovement::count());
-        $this->assertSame(0, Batch::count());
-        $this->assertSame(0, StockAdjustment::count());
+        // Rollback total.
+        $this->assertSame(20, $this->batch->fresh()->quantity_on_hand);
+        $this->assertSame(0, StockMovement::where('type', 'adjustment')->count());
+    }
+
+    public function test_keluar_melebihi_saldo_422_rollback_total(): void
+    {
+        $file = $this->xlsxFile(
+            [['OBAT-NEW', 'Obat Baru', 'Botol', 20000, 5]],
+            [['OBAT-PCT', 'Paracetamol 500mg', 'BTH-PCT-001', null, 99, 'Salah hitung besar']],
+        );
+
+        $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
+        $response->assertUnprocessable();
+        $this->assertStringContainsString('Stok tidak cukup', $response->json('errors.rows.0.errors.0'));
+
+        // All-or-nothing: obat master baru juga tidak tercipta.
+        $this->assertSame(0, StockMovement::where('type', 'adjustment')->count());
+        $this->assertNull(Medicine::where('code', 'OBAT-NEW')->first());
+        $this->assertSame(20, $this->batch->fresh()->quantity_on_hand);
+    }
+
+    public function test_keterangan_kurang_dari_5_karakter_422(): void
+    {
+        $file = $this->xlsxFile([], [
+            ['OBAT-PCT', 'Paracetamol 500mg', 'BTH-PCT-001', 5, null, 'abc'],
+        ]);
+
+        $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
+        $response->assertUnprocessable()
+            ->assertJsonPath('errors.rows.0.errors.0', 'Keterangan wajib diisi (minimal 5 karakter).');
+    }
+
+    public function test_masih_dan_keluar_keduanya_diisi_422(): void
+    {
+        $file = $this->xlsxFile([], [
+            ['OBAT-PCT', 'Paracetamol 500mg', 'BTH-PCT-001', 5, 5, 'Dobel isi tidak sah'],
+        ]);
+
+        $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
+        $response->assertUnprocessable()
+            ->assertJsonPath('errors.rows.0.errors.0', 'Isi salah satu saja: Stock Masuk atau Stock Keluar.');
+    }
+
+    public function test_sheet_hilang_422_jelas(): void
+    {
+        // File hanya punya sheet Update Stock (Master hilang).
+        $spreadsheet = new Spreadsheet();
+        $stock = $spreadsheet->getActiveSheet();
+        $stock->setTitle('Update Stock');
+        $stock->fromArray(['Kode', 'Nama Obat', 'Nomor Batch', 'Stock Masuk', 'Stock Keluar', 'Keterangan'], null, 'A1');
+        $stock->fromArray([['OBAT-PCT', 'Paracetamol 500mg', 'BTH-PCT-001', 5, null, 'Stok dari donasi']], null, 'A2');
+
+        $path = tempnam(sys_get_temp_dir(), 'xlsx');
+        (new Xlsx($spreadsheet))->save($path);
+        $file = new UploadedFile($path, 'impor.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
+        $response->assertUnprocessable();
+        $this->assertStringContainsString('Master Data', $response->json('errors.sheets.0'));
+    }
+
+    public function test_kode_obat_tidak_dikenal_422(): void
+    {
+        $file = $this->xlsxFile([], [
+            ['OBAT-HANTU', 'Obat Hantu', 'BTH-X', 5, null, 'Kode tidak terdaftar'],
+        ]);
+
+        $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
+        $response->assertUnprocessable()
+            ->assertJsonPath('errors.rows.0.errors.0', 'Kode obat OBAT-HANTU tidak ditemukan.');
     }
 
     public function test_impor_bukan_xlsx_ditolak(): void
@@ -196,45 +254,17 @@ class MedicineImportTest extends TestCase
             ->assertJsonValidationErrors(['file']);
     }
 
-    public function test_impor_tanggal_serial_excel_dikonversi(): void
+    public function test_impor_hanya_owner_dan_tanpa_token_ditolak(): void
     {
-        // Sel tanggal diisi user di Excel sebagai tanggal -> terbaca serial angka.
-        $serial = 46598; // hasil konversi dihitung via PhpSpreadsheet, bukan hardcode
-        $expected = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($serial)->format('Y-m-d');
+        $apoteker = User::factory()->create(['role' => Role::Apoteker]);
+        $file = $this->xlsxFile([], []);
 
-        $row = $this->validRow();
-        $row[8] = $serial; // Tanggal Kedaluwarsa sebagai angka serial
+        $this->withToken($apoteker->createToken('api')->plainTextToken)
+            ->getJson('/api/medicines/import/template')->assertForbidden();
+        $this->withToken($apoteker->createToken('api')->plainTextToken)
+            ->post('/api/medicines/import', ['file' => $file])->assertForbidden();
 
-        $file = $this->xlsxFile([$row]);
-
-        $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
-        $response->assertOk();
-
-        $batch = \App\Models\Batch::where('batch_number', 'BTH-IMP-001')->sole();
-        $this->assertSame($expected, $batch->expiry_date->toDateString());
-    }
-
-    public function test_impor_tanggal_serial_ngawur_422_pesan_jelas(): void
-    {
-        $row = $this->validRow();
-        $row[8] = 5; // di luar rentang serial wajar
-
-        $file = $this->xlsxFile([$row]);
-
-        $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
-        $response->assertUnprocessable();
-        $this->assertSame(
-            'Tanggal kedaluwarsa tidak valid — isi tanggal (contoh 2027-01-31).',
-            $response->json('errors.rows.0.errors.0'),
-        );
-
-        $this->assertSame(0, \App\Models\Batch::count());
-    }
-
-    public function test_impor_tanpa_token_ditolak(): void
-    {
-        $file = $this->xlsxFile([$this->validRow()]);
-
-        $this->post('/api/medicines/import', ['file' => $file])->assertUnauthorized();
+        // Tanpa token (cabut default Authorization dari withToken sebelumnya).
+        $this->withoutToken()->post('/api/medicines/import', ['file' => $file])->assertUnauthorized();
     }
 }

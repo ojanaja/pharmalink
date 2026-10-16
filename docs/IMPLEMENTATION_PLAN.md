@@ -187,6 +187,7 @@ Pemeriksaan pasca-fix: 122 passed, reconcile OK 25 batch, profit-loss demo 75800
 - 2026-10-16 Batch review (11 temuan): export stok per batch + tanggal kedaluwarsa + tanggal cetak; export penjualan + section daftar transaksi (tanggal); export pembelian + section daftar penerimaan (tanggal); supplier detail + pivot obat & harga beli; satuan di semua tabel pembelian; search bar Persediaan; impor XLSX juga di Master Data (open balance); bug NaN total stok (akar: stock_total tidak dikirim show — fix backend + fallback frontend); crash StockOpnamePage (akar: summary tidak ada di index — fix backend + null-safe frontend). Backend 129 passed / 665 assertions; frontend tsc -b 0, oxlint 0/0 (59 file). Test laba-rugi diperbaiki jadi deterministik (rentang eksplisit, bukan subDays relatif).
 - 2026-10-16 Koreksi domain + bug: nomor batch tidak unik global (boleh sama antar obat — umum dalam satu kiriman supplier; ditolak hanya obat sama + nomor sama + expiry beda). Temuan samping: receipt manual tanpa unit_cost → 500; unit_cost kini wajib backend + UI. Harga beli PO juga wajib diisi UI (placeholder "Otomatis" dihapus). Backend 130 passed / 674 assertions; verifikasi live batch sama untuk 2 obat → 201.
 - 2026-10-16 Impor XLSX: tanggal kedaluwarsa berupa angka serial Excel (46598) kini dikonversi otomatis ke tanggal; pesan error per field diperjelas (bukan "Baris tidak valid" generik); angka berformat ribuan Excel dinormalisasi. Nomor batch penerimaan bisa auto-generate B-NAMAOBAT-TANGGAL (prefill PO + tombol Auto di kedua modal penerimaan). Tabel Persediaan: guard NaN + refetchOnWindowFocus (row phantom NaN ternyata cache browser). Backend 132 passed / 679 assertions.
+- 2026-10-16 Rework impor ke template resmi user (2 sheet): "Master Data Obat" (upsert, kode "(Auto Generate)" → kode acak unik, satuan auto-create, kategori default "Umum") + "Update Stock (Menu Persediaan)" (mutasi masuk/keluar per nomor batch yang sudah terdaftar, keterangan wajib ≥5, all-or-nothing satu transaksi). Template download 2 sheet. Backend 134 passed / 686 assertions; verifikasi live end-to-end (obat auto-generate + masuk 10 + keluar 2 → movement ADJ benar). Frontend: teks modal impor disesuaikan format 2 sheet.
 - 2026-10-01 M4: `php artisan test` 57 passed / 255 assertions. API test black-box 11/12 lalu defect guard batch (duplikat antar obat lolos) diperbaiki via BatchService terpusat + 2 regression; artefak data dev dibersihkan.
 - 2026-10-01 M5: `php artisan test` 69 passed / 334 assertions. API test black-box 12/12 sesuai; minor reference.number adjustment diisi ADJ-{id}.
 - 2026-10-01 M6: `php artisan test` 78 passed / 398 assertions. API test black-box 9/9 sesuai, rekonsiliasi manual eksak (omzet/pembelian/COGS/nilai stok). Package baru: phpoffice/phpspreadsheet v5.10.
@@ -205,13 +206,7 @@ Pemeriksaan pasca-fix: 122 passed, reconcile OK 25 batch, profit-loss demo 75800
 
 ## Artefak motion graphic — 2026-10-16
 
-### Revisi V2 — 30 detik
-
-- Arahan user: tempo lebih padat, scene lebih sederhana dan visual, layout bersih dengan teks di tengah, transisi intens tetapi smooth, musik lebih ngebeat, tambahan voice-over Indonesia.
-- Acceptance criteria: tepat 30 detik, 1080p60, delapan scene dengan teks singkat, musik 144 BPM dan narasi terdengar jelas, transisi serta layout diperiksa, MP4 versi lama tetap tersedia.
-- Implementasi: komposisi baru dengan objek kapsul, stok, batch, koneksi transaksi, alur ikon, grafik, dan brand; metadata/grid/tabel/paragraf versi lama dihapus dari film. Backup sumber V1 di `artifacts/pharmalink-motion/archive-v1/`.
-- Konektor HeyGen meminta autentikasi ulang saat pencarian voice; produksi VO dilanjutkan lewat TTS Indonesia terpisah tanpa mengubah koneksi akun.
-- Status: produksi; hasil verifikasi V2 dicatat setelah render.
+### Versi V1 — 60 detik
 
 - Permintaan: film SaaS 60 detik bertema accountability, reliability, efficiency berdasarkan konteks frontend.
 - Milestone V1: tinjau bukti fitur dan susun arah kreatif; V2: komposisi + musik; V3: pemeriksaan layout/motion dan render MP4.
@@ -220,9 +215,47 @@ Pemeriksaan pasca-fix: 122 passed, reconcile OK 25 batch, profit-loss demo 75800
 - Bukti pesan ditinjau dari frontend kasir, kartu stok, stock opname, dashboard, ekspor laporan serta SaleService. Tidak ada klaim metrik performa atau jaminan uptime.
 - Lokasi: `artifacts/pharmalink-motion/`. Selesai: MP4 H.264 1920×1080, 60 fps, 3.600 frame, tepat 60 detik; AAC stereo 48 kHz tepat 60 detik, 11.764.565 byte. Pemeriksaan strict pada 10 frame utama serta 5 frame tambahan lolos tanpa warning (159/159 pemeriksaan kontras); decode penuh FFmpeg exit 0 tanpa error. Frame hasil encode diperiksa visual. Sumber dan cara render ada di README artefak; tidak ada perubahan runtime produk oleh pekerjaan video.
 
+### Revisi V2 — 30 detik
+
+- Arahan user: tempo lebih padat, scene lebih sederhana dan visual, layout bersih dengan teks di tengah, transisi intens tetapi smooth, musik lebih ngebeat, tambahan voice-over Indonesia.
+- Acceptance criteria: tepat 30 detik, 1080p60, delapan scene dengan teks singkat, musik 144 BPM dan narasi terdengar jelas, transisi serta layout diperiksa, MP4 versi lama tetap tersedia.
+- Implementasi: komposisi baru dengan objek kapsul, stok, batch, koneksi transaksi, alur ikon, grafik, dan brand; metadata/grid/tabel/paragraf versi lama dihapus dari film. Backup sumber V1 di `artifacts/pharmalink-motion/archive-v1/`.
+- Konektor HeyGen meminta autentikasi ulang saat pencarian voice; produksi VO dilanjutkan lewat TTS Indonesia terpisah tanpa mengubah koneksi akun.
+- Status: selesai. `hyperframes check --strict` pada 8 sampel utama + 3 tambahan: 0 error/warning lint, runtime, motion dan layout; 21/21 cek kontras lolos. MP4 V2 H.264 1920×1080, 60 fps, 1.800 frame, video/audio tepat 30 detik, AAC stereo 48 kHz, 8.291.318 byte. Decode penuh FFmpeg exit 0 tanpa error; frame encode ditinjau visual. Berkas: `renders/pharmalink-motion-30s-v2.mp4`.
+
+### Revisi V4 — ElevenLabs dan beat mengikuti animasi
+
+- Arahan user: ganti VO ke provider seperti ElevenLabs agar ekspresif; backing lebih ngebeat sesuai animasi.
+- Akses: pencarian plugin ElevenLabs tidak mengembalikan integrasi; tidak ada key ElevenLabs pada environment yang diperiksa. Halaman ElevenLabs browser mengarah ke Sign In. Login atau key lokal ditanyakan kepada user; sintesis ElevenLabs belum dilakukan.
+- Pekerjaan independen: draft instrumental 144 BPM, drum/fill yang mengikuti grid transisi, pengarahan VO dan cue delapan scene di `audio-v4/VOICE_DIRECTION.md`. Video review `audio-v4/preview-music-only.mp4` hanya backing instrumental; bukan final ElevenLabs.
+- Status: selesai setelah user login. VO disintesis melalui ElevenLabs Eleven v4 (Maya, Indonesian, Generation 1), diunduh 18,755875 detik dan ditempatkan di delapan scene tanpa perubahan tempo ucapan. Musik lokal 144 BPM mengikuti grid animasi; musik ElevenLabs meminta upgrade untuk download sehingga tidak dipakai. Hasil `renders/pharmalink-motion-30s-v4-elevenlabs.mp4`: 1080p60, 1.800 frame, tepat 30 detik, AAC stereo 48 kHz, 8.483.473 byte. Check strict pada 8 sampel lolos, layout 0, kontras 11/11; log QA disimpan karena history Studio terkunci proses preview. Decode final dicatat di `qa/decode-elevenlabs-v4.log`.
+
+### Revisi V3 — audio
+
+- Arahan user: VO lebih berekspresi dan musik berbasis lofi hip-hop ala SaaS.
+- Acceptance criteria: narasi baru (karakter perempuan, variasi penekanan/intonasi), backing lofi hip-hop 84 BPM dengan swing dan electric piano, ucapan tetap jelas, durasi 30 detik, visual V2 tetap, MP4 V1/V2 tetap tersedia.
+- Sumber audio V2 dicadangkan di `archive-v2/`. Konektor HeyGen masih meminta autentikasi ulang; VO dibuat dengan TTS Indonesia yang tersedia.
+- Status: selesai. File `renders/pharmalink-motion-30s-v3-lofi.mp4`: H.264 1080p60, 1.800 frame, video/audio tepat 30 detik, AAC stereo 48 kHz, 8.471.261 byte. `hyperframes check --strict`: 8 sampel, tanpa error/warning, 11/11 cek kontras lolos. Decode penuh FFmpeg exit 0 tanpa error; peak mix −0,5 dBFS, mean −14,4 dBFS. SHA-256 elementary video V2/V3 identik (visual tidak di-encode ulang). VO perempuan dengan prosodi per frasa; kalimat penutup dipadatkan agar tidak tergesa. Timing serta sumber mix didokumentasikan di README artefak.
+
+## Feature showcase dengan device mockup — 2026-10-16
+
+- User menyetujui video terpisah 30 detik: dashboard, kasir, persediaan/batch, pembelian/penerimaan, laporan, dan penutup. Setiap scene memakai laptop konsisten dengan pembesaran layar saat aksi utama.
+- Milestone: F-video-1 lingkungan demo terisolasi + capture layar frontend aktual; F-video-2 desain komposisi, VO ElevenLabs, musik dan koreografi; F-video-3 QA, preview, render MP4.
+- Acceptance criteria: UI berasal dari frontend yang benar-benar dijalankan; transaksi demo tidak menyentuh database kerja; laptop ada di tiap scene; empat fitur terbaca dan aksinya terlihat; tepat 30 detik, 1080p60, VO Indonesia, preview dan sumber tersedia; video SaaS sebelumnya dipertahankan.
+- Isolasi: database MySQL baru `pharmalink_feature_video`, backend demo port 8001 dan frontend origin 5174. Tidak mengganti konfigurasi `.env` atau service kerja.
+- Batas visual: tidak mengimplementasikan/mengarang UI baru. Captures menggambarkan state UI nyata, sementara cursor, kamera, dan transisi dibuat di editor video.
+- Status: selesai. Milestone F-video-1/2/3 terpenuhi. Hasil `artifacts/pharmalink-features/renders/pharmalink-features-30s.mp4`: H.264 1920×1080,60fps,1.800frame,video/audio30,000detik,AAC48kHz stereo,19.043.089byte. Check strict12sampel:0error/warning/layout,kontras10/10. Decode penuh FFmpeg exit0 tanpa error. Preview persisten port3018. Capture frontend1280×720,VO ElevenLabs Maya/v4 baru302karakter,speed1x,musik144BPM dengan ducking. Container demo dihentikan sesudah capture; database demo dipertahankan dan data transaksi database kerja tetap10baris dengan tanggal terakhir3Okt2026. Tidak mengubah source aplikasi.
+
 ## Risiko produk
 
 - Konsistensi stok konkuren → `lockForUpdate` + satu `StockService` + unique constraint.
 - Drift snapshot vs ledger → command rekonsiliasi (M7) + primitif tunggal.
 - Ekspor/impor XLSX (PhpSpreadsheet) → validasi keras + template terkunci di M6.
 - Scope creep (resep/pasien/dokter) → brief mengecualikan; keputusan eksplisit diperlukan.
+
+### Feature showcase V2 — layar utuh dan transisi menyambung
+
+- Arahan user: hindari screenshot dalam device; prefer layer dari Figma, atau screenshot tanpa mockup dan tanpa zoom/crop. Perbaiki transisi yang terasa patah.
+- Akses Figma: design context menolak izin edit; konektor data403 token expired. Jalur layer UI bergantung pada akses tersebut dan tidak dijalankan. Menggunakan alternatif screenshot utuh yang diizinkan user.
+- Acceptance criteria: tidak ada device/perspektif; gambar aplikasi utuh pada area tetap16:9; tidak ada tween transform screenshot; transisi state/bab saling dissolve; empat fitur tetap terlihat;30detik,1080p60,VO/musik tetap;V1 tetap tersedia.
+- Milestone V2-1/2/3 selesai. Hasil `artifacts/pharmalink-features/renders/pharmalink-features-30s-v2-flat.mp4`: H.264 1920×1080, 60 fps, 1.800 frame, durasi video/audio 30,000 detik, AAC stereo 48 kHz, 6.931.221 byte. Check strict 15 sampel: tanpa error, warning, atau masalah layout; kontras 10/10. Decode penuh FFmpeg exit 0 tanpa error. Tumpang tindih judul pada batas bab diperbaiki setelah pemeriksaan frame hasil render. Preview port 3018 diperbarui; V1 tetap tersedia.
