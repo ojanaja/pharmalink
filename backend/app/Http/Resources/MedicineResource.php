@@ -29,7 +29,9 @@ class MedicineResource extends JsonResource
                 isset($this->stock_total) || $this->relationLoaded('batches'),
                 fn () => isset($this->stock_total)
                     ? (int) $this->stock_total
-                    : (int) $this->batches->sum('quantity_on_hand')
+                    : (int) $this->batches->sum('quantity_on_hand'),
+                // Obat tanpa batch: withSum menghasilkan null — selalu kirim 0 agar klien tidak menerima key yang hilang.
+                0,
             ),
             'batches' => BatchResource::collection($this->whenLoaded('batches')),
         ];

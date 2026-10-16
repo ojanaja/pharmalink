@@ -238,7 +238,7 @@ export function CashierPage() {
                   )}
 
                   {data?.data.map((medicine) => {
-                    const stock = Number(medicine.stock_total)
+                    const stock = Number(medicine.stock_total ?? 0)
                     const outOfStock = stock <= 0
                     return (
                       <tr key={medicine.id} className="border-t border-line">
