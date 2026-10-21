@@ -8,11 +8,18 @@ import { Modal } from '../../components/ui/Modal'
 import { Pagination } from '../../components/ui/Pagination'
 import { SortHeader } from '../../components/ui/SortHeader'
 import { ApiError, api } from '../../lib/api'
+import { formatDateId, todayLocal } from '../../lib/format'
 import { opnameStatusLabel } from '../../lib/medicine'
 import { sortRows, useSort } from '../../lib/sort'
 import type { LaravelPaginated, OpnameItem, StockOpname } from '../../lib/types'
 
 type WizardStep = 'hitung' | 'konfirmasi'
+
+/** Sisa hari menuju tanggal kedaluwarsa — dasar penanda warna peringatan. */
+function daysUntil(date: string): number {
+  const today = new Date(todayLocal())
+  return Math.round((new Date(date).getTime() - today.getTime()) / 86_400_000)
+}
 
 interface CountDraft {
   physical: number
@@ -60,6 +67,8 @@ export function StockOpnamePage() {
         return item.medicine.name
       case 'batch':
         return item.batch.batch_number
+      case 'kedaluwarsa':
+        return item.batch.expiry_date
       case 'sistem':
         return item.system_qty
       default:
@@ -231,6 +240,7 @@ export function StockOpnamePage() {
                   <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
                     <SortHeader label="Obat" sortKey="obat" sort={countSort} onToggle={toggleCountSort} />
                     <SortHeader label="Batch" sortKey="batch" sort={countSort} onToggle={toggleCountSort} />
+                    <SortHeader label="Kedaluwarsa" sortKey="kedaluwarsa" sort={countSort} onToggle={toggleCountSort} />
                     <SortHeader label="Stok Sistem" sortKey="sistem" sort={countSort} onToggle={toggleCountSort} align="right" />
                     <th className="px-4 py-3 text-right">Stok Fisik</th>
                     <th className="px-4 py-3 text-right">Selisih</th>
@@ -249,6 +259,15 @@ export function StockOpnamePage() {
                         </td>
                         <td className="px-4 py-2.5 text-[13px] text-ink-secondary">
                           {item.batch.batch_number}
+                        </td>
+                        <td
+                          className={`px-4 py-2.5 text-[13px] ${
+                            daysUntil(item.batch.expiry_date) <= 60
+                              ? 'font-semibold text-warning-ink'
+                              : 'text-ink-secondary'
+                          }`}
+                        >
+                          {formatDateId(item.batch.expiry_date)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-[13px] text-ink-secondary">
                           {item.system_qty}
@@ -353,6 +372,7 @@ export function StockOpnamePage() {
                   <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
                     <th className="px-5 py-3">Obat</th>
                     <th className="px-4 py-3">Batch</th>
+                    <th className="px-4 py-3">Kedaluwarsa</th>
                     <th className="px-4 py-3 text-right">Sistem</th>
                     <th className="px-4 py-3 text-right">Fisik</th>
                     <th className="px-4 py-3 text-right">Selisih</th>
@@ -370,6 +390,15 @@ export function StockOpnamePage() {
                         </td>
                         <td className="px-4 py-2.5 text-[13px] text-ink-secondary">
                           {item.batch.batch_number}
+                        </td>
+                        <td
+                          className={`px-4 py-2.5 text-[13px] ${
+                            daysUntil(item.batch.expiry_date) <= 60
+                              ? 'font-semibold text-warning-ink'
+                              : 'text-ink-secondary'
+                          }`}
+                        >
+                          {formatDateId(item.batch.expiry_date)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-[13px] text-ink-secondary">
                           {item.system_qty}
@@ -693,6 +722,7 @@ function OpnameDetailModal({ opnameId, onClose }: { opnameId: number | null; onC
                 <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
                   <th className="px-3 py-2">Obat</th>
                   <th className="px-3 py-2">Batch</th>
+                  <th className="px-3 py-2">Kedaluwarsa</th>
                   <th className="px-3 py-2 text-right">Sistem</th>
                   <th className="px-3 py-2 text-right">Fisik</th>
                   <th className="px-3 py-2 text-right">Selisih</th>
@@ -707,6 +737,15 @@ function OpnameDetailModal({ opnameId, onClose }: { opnameId: number | null; onC
                     </td>
                     <td className="px-3 py-2 text-[13px] text-ink-secondary">
                       {item.batch.batch_number}
+                    </td>
+                    <td
+                      className={`px-3 py-2 text-[13px] ${
+                        daysUntil(item.batch.expiry_date) <= 60
+                          ? 'font-semibold text-warning-ink'
+                          : 'text-ink-secondary'
+                      }`}
+                    >
+                      {formatDateId(item.batch.expiry_date)}
                     </td>
                     <td className="px-3 py-2 text-right text-[13px] text-ink-secondary">
                       {item.system_qty}
