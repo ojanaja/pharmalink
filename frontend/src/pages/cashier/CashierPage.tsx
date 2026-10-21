@@ -117,7 +117,8 @@ export function CashierPage() {
     setSubmitting(true)
     setSubmitError(null)
     try {
-      const created = await api<SaleCreated>('/sales', {
+      // Respons API dibungkus envelope Laravel { data } — api() mengembalikan body mentah.
+      const created = await api<{ data: SaleCreated }>('/sales', {
         method: 'POST',
         body: {
           items: cart.map((item) => ({
@@ -128,7 +129,7 @@ export function CashierPage() {
           payment_method: 'tunai',
         },
       })
-      setSale(created)
+      setSale(created.data)
       setLastCart(cart)
       clearCart()
     } catch (err) {
