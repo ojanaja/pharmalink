@@ -156,6 +156,26 @@ class StockOpnameService
     }
 
     /**
+     * Batalkan sesi opname DRAFT: hapus items + header. Draft tidak pernah
+     * menulis movement, jadi hapus fisik aman. Confirmed → 409.
+     */
+    public function cancel(StockOpname $opname): void
+    {
+        DB::transaction(function () use ($opname) {
+            $locked = StockOpname::whereKey($opname->id)->lockForUpdate()->firstOrFail();
+
+            if ($locked->status !== OpnameStatus::Draft) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Sesi sudah dikonfirmasi dan tidak dapat dibatalkan.',
+                ], 409));
+            }
+
+            $locked->items()->delete();
+            $locked->delete();
+        });
+    }
+
+    /**
      * @throws HttpResponseException 409 bila opname sudah confirmed.
      */
     protected function assertDraft(StockOpname $opname): void

@@ -72,6 +72,16 @@ class StockOpnameController extends Controller
     }
 
     /**
+     * Batalkan sesi draft (hapus fisik — draft tidak menulis movement).
+     */
+    public function destroy(StockOpname $stockOpname): \Illuminate\Http\Response
+    {
+        $this->opnames->cancel($stockOpname);
+
+        return response()->noContent();
+    }
+
+    /**
      * Konfirmasi: stok berubah di sini, movement ditulis untuk selisih != 0.
      */
     public function confirm(Request $request, StockOpname $stockOpname): StockOpnameResource

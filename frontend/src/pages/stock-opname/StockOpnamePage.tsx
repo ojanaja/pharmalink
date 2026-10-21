@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Play } from 'lucide-react'
+import { Check, Play, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -27,6 +27,8 @@ export function StockOpnamePage() {
   const [touched, setTouched] = useState<Set<number>>(new Set())
   const [page, setPage] = useState(1)
   const [detailId, setDetailId] = useState<number | null>(null)
+  const [cancelTarget, setCancelTarget] = useState<StockOpname | null>(null)
+  const [cancelSuccess, setCancelSuccess] = useState<string | null>(null)
   const { sort: historySort, toggleSort: toggleHistorySort } = useSort()
   const { sort: countSort, toggleSort: toggleCountSort } = useSort()
 
@@ -465,6 +467,12 @@ export function StockOpnamePage() {
         </p>
       )}
 
+      {cancelSuccess && (
+        <p className="rounded-lg bg-success-bg px-4 py-2.5 text-[13px] text-success-ink">
+          Sesi {cancelSuccess} dibatalkan — hasil hitung dihapus, stok tidak berubah.
+        </p>
+      )}
+
       <div className="overflow-hidden rounded-card border border-line bg-surface">
         <div className="border-b border-line px-5 py-4">
           <h3 className="text-[15px] font-bold text-ink">Sesi Stock Opname</h3>
@@ -537,13 +545,28 @@ export function StockOpnamePage() {
                       <Badge variant={status.variant}>{status.label}</Badge>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setDetailId(opname.id)}
-                        className="text-[13px] font-bold text-primary hover:underline"
-                      >
-                        Lihat
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setDetailId(opname.id)}
+                          className="text-[13px] font-bold text-primary hover:underline"
+                        >
+                          Lihat
+                        </button>
+                        {opname.status === 'draft' && (
+                          <button
+                            type="button"
+                            aria-label={`Batalkan sesi ${opname.opname_number}`}
+                            onClick={() => {
+                              setCancelTarget(opname)
+                              setCancelSuccess(null)
+                            }}
+                            className="text-danger-ink transition-opacity hover:opacity-70"
+                          >
+                            <X size={15} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
@@ -564,7 +587,73 @@ export function StockOpnamePage() {
       </div>
 
       <OpnameDetailModal opnameId={detailId} onClose={() => setDetailId(null)} />
+
+      <CancelSessionModal
+        target={cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        onSaved={(opnameNumber) => {
+          setCancelTarget(null)
+          setCancelSuccess(opnameNumber)
+          queryClient.invalidateQueries({ queryKey: ['stock-opnames'] })
+        }}
+      />
     </div>
+  )
+}
+
+/** Konfirmasi pembatalan sesi draft — hasil hitung dihapus, stok tidak berubah. */
+function CancelSessionModal({
+  target,
+  onClose,
+  onSaved,
+}: {
+  target: StockOpname | null
+  onClose: () => void
+  onSaved: (opnameNumber: string) => void
+}) {
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleCancel() {
+    if (!target) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api(`/stock-opnames/${target.id}`, { method: 'DELETE' })
+      onSaved(target.opname_number)
+    } catch (err) {
+      // 409/422: sesi sudah terkonfirmasi atau tidak dapat dibatalkan.
+      setError(err instanceof ApiError ? err.message : 'Pembatalan sesi gagal. Coba lagi.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={target !== null}
+      title={`Batalkan sesi ${target?.opname_number ?? ''}?`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Batal
+          </Button>
+          <Button variant="danger" loading={submitting} onClick={handleCancel}>
+            Batalkan Sesi
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <p>Perhitungan fisik pada sesi ini akan dihapus dan stok tidak berubah.</p>
+        {error && (
+          <div role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger-ink">
+            {error}
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }
 

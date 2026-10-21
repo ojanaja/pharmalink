@@ -67,6 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('stock-opnames/{stockOpname}', [StockOpnameController::class, 'show']);
     Route::put('stock-opnames/{stockOpname}/items', [StockOpnameController::class, 'updateCounts']);
     Route::post('stock-opnames/{stockOpname}/confirm', [StockOpnameController::class, 'confirm']);
+    Route::delete('stock-opnames/{stockOpname}', [StockOpnameController::class, 'destroy']);
 
     // Pengaturan apotek + manajemen user.
     Route::get('settings', [SettingsController::class, 'show']);

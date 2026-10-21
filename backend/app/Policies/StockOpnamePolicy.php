@@ -30,4 +30,9 @@ class StockOpnamePolicy
     {
         return true;
     }
+
+    public function delete(User $user, StockOpname $stockOpname): bool
+    {
+        return true;
+    }
 }

@@ -208,4 +208,48 @@ class StockOpnameTest extends TestCase
         $this->postJson('/api/stock-opnames', [])->assertUnauthorized();
         $this->postJson('/api/stock-adjustments', [])->assertUnauthorized();
     }
+
+    public function test_hapus_sesi_draft_sukses(): void
+    {
+        $data = $this->createOpname();
+        $opnameId = $data['id'];
+
+        $this->withToken($this->token())
+            ->deleteJson("/api/stock-opnames/{$opnameId}")
+            ->assertNoContent();
+
+        // Sesi hilang dari index; items ikut terhapus.
+        $this->withToken($this->token())
+            ->getJson('/api/stock-opnames')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->assertDatabaseMissing('stock_opnames', ['id' => $opnameId]);
+        $this->assertDatabaseMissing('stock_opname_items', ['opname_id' => $opnameId]);
+    }
+
+    public function test_hapus_sesi_confirmed_409_data_utuh(): void
+    {
+        $data = $this->createOpname();
+
+        $this->withToken($this->token())
+            ->postJson("/api/stock-opnames/{$data['id']}/confirm")
+            ->assertOk();
+
+        $response = $this->withToken($this->token())
+            ->deleteJson("/api/stock-opnames/{$data['id']}");
+        $response->assertConflict();
+        $this->assertSame('Sesi sudah dikonfirmasi dan tidak dapat dibatalkan.', $response->json('message'));
+
+        // Data utuh.
+        $this->assertDatabaseHas('stock_opnames', ['id' => $data['id'], 'status' => 'confirmed']);
+        $this->assertSame(3, \App\Models\StockOpnameItem::count());
+    }
+
+    public function test_hapus_sesi_tanpa_token_ditolak(): void
+    {
+        $data = $this->createOpname();
+
+        $this->withoutToken()->deleteJson("/api/stock-opnames/{$data['id']}")->assertUnauthorized();
+    }
 }
