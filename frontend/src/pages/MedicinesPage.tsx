@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Eye, Search, Upload } from 'lucide-react'
+import { ClipboardList, Eye, Search, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../components/ui/Badge'
@@ -125,9 +125,19 @@ export function MedicinesPage() {
             ))}
           </div>
         </div>
-        <Button variant="secondary" size="sm" icon={<Upload size={14} />} onClick={() => setImportOpen(true)}>
-          Impor
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<ClipboardList size={14} />}
+            onClick={() => navigate('/stock-opname')}
+          >
+            Stock Opname
+          </Button>
+          <Button variant="secondary" size="sm" icon={<Upload size={14} />} onClick={() => setImportOpen(true)}>
+            Impor
+          </Button>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-card border border-line bg-surface shadow-low">
