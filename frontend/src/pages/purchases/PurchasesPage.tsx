@@ -1,16 +1,17 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { PackagePlus, Plus } from 'lucide-react'
+import { PackagePlus, Plus, Search } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
-import { Select } from '../../components/ui/Field'
+import { Input, Select } from '../../components/ui/Field'
 import { Pagination } from '../../components/ui/Pagination'
 import { SortHeader } from '../../components/ui/SortHeader'
 import { api } from '../../lib/api'
 import { formatDateId, formatRupiah } from '../../lib/format'
 import { poStatusLabel } from '../../lib/medicine'
 import { sortRows, useSort } from '../../lib/sort'
+import { useDebounce } from '../../lib/useDebounce'
 import type { LaravelPaginated, PurchaseOrderListItem, Supplier } from '../../lib/types'
 import { ManualReceiptModal } from './ManualReceiptModal'
 import { PurchaseOrderFormModal } from './PurchaseOrderFormModal'
@@ -27,6 +28,8 @@ export function PurchasesPage() {
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState('')
   const [supplierId, setSupplierId] = useState('')
+  const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search)
   const [formOpen, setFormOpen] = useState(false)
   const [manualReceiptOpen, setManualReceiptOpen] = useState(false)
   const queryClient = useQueryClient()
@@ -38,11 +41,12 @@ export function PurchasesPage() {
   })
 
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ['purchase-orders', page, status, supplierId],
+    queryKey: ['purchase-orders', page, status, supplierId, debouncedSearch],
     queryFn: () => {
       const params = new URLSearchParams({ page: String(page) })
       if (status) params.set('status', status)
       if (supplierId) params.set('supplier_id', supplierId)
+      if (debouncedSearch) params.set('search', debouncedSearch)
       return api<LaravelPaginated<PurchaseOrderListItem>>(`/purchase-orders?${params}`)
     },
     placeholderData: keepPreviousData,
@@ -119,6 +123,24 @@ export function PurchasesPage() {
               </option>
             ))}
           </Select>
+        </div>
+        <div className="flex w-56 flex-col gap-1">
+          <label htmlFor="filter-search" className="text-[11px] text-ink-secondary">
+            Cari nomor PO
+          </label>
+          <div className="relative">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-placeholder" aria-hidden="true" />
+            <Input
+              id="filter-search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value)
+                setPage(1)
+              }}
+              placeholder="PO-20261018-…"
+              className="pl-8"
+            />
+          </div>
         </div>
         <div className="flex w-64 flex-col gap-1">
           <label htmlFor="filter-supplier" className="text-[11px] text-ink-secondary">

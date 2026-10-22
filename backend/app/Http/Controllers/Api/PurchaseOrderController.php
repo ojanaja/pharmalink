@@ -58,6 +58,10 @@ class PurchaseOrderController extends Controller
             ->when($filters['to'] ?? null, fn ($q, $to) => $q->where(
                 'ordered_at', '<=', Carbon::createFromFormat('Y-m-d', $to)->toDateString()
             ))
+            // Pencarian nomor PO.
+            ->when($filters['search'] ?? null, fn ($q, $term) => $q->where(
+                'po_number', 'like', "%{$term}%"
+            ))
             ->orderByDesc('ordered_at')
             ->orderByDesc('id')
             ->paginate($filters['per_page'] ?? 15)

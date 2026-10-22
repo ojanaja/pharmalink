@@ -20,6 +20,7 @@ class PurchaseOrderIndexRequest extends FormRequest
             'status' => ['nullable', Rule::enum(PurchaseOrderStatus::class)],
             'from' => ['nullable', 'date_format:Y-m-d'],
             'to' => ['nullable', 'date_format:Y-m-d'],
+            'search' => ['nullable', 'string', 'max:50'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ];
     }
