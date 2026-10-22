@@ -17,6 +17,7 @@ class SaleIndexRequest extends FormRequest
             'date' => ['nullable', 'date_format:Y-m-d'],
             'from' => ['nullable', 'date_format:Y-m-d'],
             'to' => ['nullable', 'date_format:Y-m-d'],
+            'search' => ['nullable', 'string', 'max:50'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ];
     }

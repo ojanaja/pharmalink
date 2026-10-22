@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban } from 'lucide-react'
+import { Ban, Search } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../../auth/useAuth'
 import { Badge } from '../../components/ui/Badge'
@@ -12,6 +12,7 @@ import { ApiError, api } from '../../lib/api'
 import { formatDateTimeId, formatRupiah, todayLocal } from '../../lib/format'
 import { saleStatusLabel } from '../../lib/medicine'
 import { sortRows, useSort } from '../../lib/sort'
+import { useDebounce } from '../../lib/useDebounce'
 import type { LaravelPaginated, SaleDetail, SaleTransaction } from '../../lib/types'
 
 // Filter default riwayat = hari ini (Y-m-d, waktu lokal), dihitung sekali saat modul dimuat.
@@ -26,13 +27,17 @@ export function SalesHistoryPage() {
   const [from, setFrom] = useState(TODAY)
   const [to, setTo] = useState(TODAY)
   const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search)
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'cancelled'>('all')
   const { sort, toggleSort } = useSort()
 
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ['sales-history', from, to, page],
+    queryKey: ['sales-history', from, to, page, debouncedSearch],
     queryFn: () =>
-      api<LaravelPaginated<SaleTransaction>>(`/sales?from=${from}&to=${to}&page=${page}`),
+      api<LaravelPaginated<SaleTransaction>>(
+        `/sales?from=${from}&to=${to}&page=${page}&search=${encodeURIComponent(debouncedSearch)}`,
+      ),
     placeholderData: keepPreviousData,
   })
 
@@ -71,6 +76,21 @@ export function SalesHistoryPage() {
             Sampai
           </label>
           <Input id="sales-to" type="date" value={to} min={from} onChange={(e) => { setTo(e.target.value); setPage(1) }} className="w-40" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="sales-search" className="text-[11px] text-ink-secondary">
+            Cari nomor transaksi
+          </label>
+          <div className="relative">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-placeholder" aria-hidden="true" />
+            <Input
+              id="sales-search"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+              placeholder="TRX-20261021-…"
+              className="w-56 pl-8"
+            />
+          </div>
         </div>
         <span className="pb-2.5 text-xs text-ink-secondary">
           {data?.meta.total ?? 0} transaksi pada periode ini.

@@ -53,6 +53,10 @@ class SaleController extends Controller
             ->when($filters['to'] ?? null, fn ($q, $to) => $q->where(
                 'sold_at', '<=', Carbon::createFromFormat('Y-m-d', $to)->endOfDay()
             ))
+            // Pencarian nomor transaksi (invoice_number).
+            ->when($filters['search'] ?? null, fn ($q, $term) => $q->where(
+                'invoice_number', 'like', "%{$term}%"
+            ))
             ->orderByDesc('sold_at')
             ->orderByDesc('id')
             ->paginate($filters['per_page'] ?? 15)
