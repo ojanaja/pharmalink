@@ -24,4 +24,9 @@ class PurchaseOrderPolicy
     {
         return true;
     }
+
+    public function update(User $user, PurchaseOrder $purchaseOrder): bool
+    {
+        return true;
+    }
 }

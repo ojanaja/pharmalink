@@ -50,6 +50,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('purchase-orders', [PurchaseOrderController::class, 'index']);
     Route::get('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'show']);
     Route::post('purchase-orders/{purchaseOrder}/receipts', [PurchaseOrderController::class, 'storeReceipt']);
+    Route::post('purchase-orders/{purchaseOrder}/cancel', [PurchaseOrderController::class, 'cancel']);
 
     // Retur pembelian ke supplier (owner & apoteker boleh).
     Route::post('purchase-returns', [PurchaseReturnController::class, 'store']);

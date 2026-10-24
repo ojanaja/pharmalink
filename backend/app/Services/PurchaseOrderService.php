@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\PurchaseOrderStatus;
 use App\Models\PurchaseOrder;
 use App\Models\User;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -43,6 +44,30 @@ class PurchaseOrderService
             }
 
             return $po->load(['items.medicine:id,code,name', 'supplier:id,name']);
+        });
+    }
+
+    /**
+     * Batalkan PO: hanya status ordered (belum ada penerimaan = belum ada
+     * movement stok) yang boleh dibatalkan.
+     *
+     * @throws \Illuminate\Http\Exceptions\HttpResponseException 409 bila status bukan ordered.
+     */
+    public function cancel(PurchaseOrder $purchaseOrder): PurchaseOrder
+    {
+        return DB::transaction(function () use ($purchaseOrder) {
+            $locked = PurchaseOrder::whereKey($purchaseOrder->id)->lockForUpdate()->firstOrFail();
+
+            if ($locked->status !== PurchaseOrderStatus::Ordered) {
+                throw new HttpResponseException(response()->json([
+                    'message' => "PO {$locked->po_number} tidak dapat dibatalkan (status: {$locked->status->value}).",
+                ], 409));
+            }
+
+            $locked->status = PurchaseOrderStatus::Cancelled;
+            $locked->save();
+
+            return $locked->load('supplier:id,name');
         });
     }
 

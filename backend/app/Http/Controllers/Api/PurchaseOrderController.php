@@ -121,6 +121,18 @@ class PurchaseOrderController extends Controller
     }
 
     /**
+     * Batalkan PO (hanya status ordered); tanpa efek stok.
+     */
+    public function cancel(\Illuminate\Http\Request $request, PurchaseOrder $purchaseOrder): PurchaseOrderResource
+    {
+        $this->authorize('update', $purchaseOrder);
+
+        $po = $this->purchaseOrders->cancel($purchaseOrder);
+
+        return new PurchaseOrderResource($po);
+    }
+
+    /**
      * Ringkasan pembelian per bulan (6 bulan terakhir default), dari data penerimaan.
      */
     public function monthlySummary(Request $request): JsonResponse

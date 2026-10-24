@@ -286,6 +286,53 @@ class PurchaseOrderTest extends TestCase
 
         $po = $this->createPo();
         $this->postJson("/api/purchase-orders/{$po->id}/receipts", ['items' => []])->assertUnauthorized();
+        $this->withoutToken()->postJson("/api/purchase-orders/{$po->id}/cancel")->assertUnauthorized();
+    }
+
+    public function test_cancel_po_ordered_sukses(): void
+    {
+        $po = $this->withToken($this->token())->postJson('/api/purchase-orders', [
+            'supplier_id' => $this->supplier->id,
+            'items' => [['medicine_id' => $this->medicineA->id, 'quantity' => 10]],
+        ])->assertCreated()->json('data');
+
+        $response = $this->withToken($this->token())
+            ->postJson("/api/purchase-orders/{$po['id']}/cancel")
+            ->assertOk();
+
+        $this->assertSame('cancelled', $response->json('data.status'));
+
+        // Cancel lagi -> 409; tidak ada efek stok.
+        $again = $this->withToken($this->token())->postJson("/api/purchase-orders/{$po['id']}/cancel");
+        $again->assertConflict();
+        $this->assertStringContainsString('status: cancelled', (string) $again->json('message'));
+        $this->assertSame(0, StockMovement::count());
+    }
+
+    public function test_cancel_po_parsial_atau_received_409(): void
+    {
+        $po = $this->withToken($this->token())->postJson('/api/purchase-orders', [
+            'supplier_id' => $this->supplier->id,
+            'items' => [['medicine_id' => $this->medicineA->id, 'quantity' => 10]],
+        ])->assertCreated()->json('data');
+
+        // Terima sebagian -> partially_received.
+        $this->withToken($this->token())->postJson("/api/purchase-orders/{$po['id']}/receipts", [
+            'items' => [[
+                'po_item_id' => $po['items'][0]['id'],
+                'batch_number' => 'BTH-CXL-001',
+                'expiry_date' => now()->addYear()->toDateString(),
+                'quantity' => 4,
+            ]],
+        ])->assertCreated();
+
+        $response = $this->withToken($this->token())->postJson("/api/purchase-orders/{$po['id']}/cancel");
+        $response->assertConflict();
+        $this->assertStringContainsString('partially_received', (string) $response->json('message'));
+
+        // Data utuh: status tetap, stok tetap.
+        $this->assertSame('partially_received', \App\Models\PurchaseOrder::sole()->status->value);
+        $this->assertSame(4, Batch::sole()->quantity_on_hand);
     }
 
     public function test_monthly_summary_angka_benar(): void
