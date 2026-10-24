@@ -5,9 +5,11 @@ import { Topbar } from './Topbar'
 
 export function AppShell() {
   const location = useLocation()
-  const current = NAV_ITEMS.find(
-    (item) => item.path === '/' || location.pathname.startsWith(item.path),
-  )
+  const current = NAV_ITEMS
+    .filter((item) =>
+      item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path),
+    )
+    .sort((a, b) => b.path.length - a.path.length)[0]
 
   return (
     <div className="flex min-h-screen bg-app">
