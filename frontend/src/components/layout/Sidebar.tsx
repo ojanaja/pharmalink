@@ -22,7 +22,7 @@ export function Sidebar() {
         <span className="flex size-9 items-center justify-center rounded-[10px] bg-primary">
           <Cross size={18} className="text-white" aria-hidden="true" />
         </span>
-        <span className="text-xs font-bold text-white">Apotek Sehat Sentosa</span>
+        <span className="text-xs font-bold text-white">Pharmalink</span>
       </div>
 
       {/* Menu — 7 item, tinggi 42, ikon 18 + label 13 */}

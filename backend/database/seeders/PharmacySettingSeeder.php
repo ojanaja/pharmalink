@@ -12,7 +12,7 @@ class PharmacySettingSeeder extends Seeder
     public function run(): void
     {
         \App\Models\PharmacySetting::query()->firstOrCreate(
-            ['name' => 'Apotek Sehat Sentosa'],
+            ['name' => 'Pharmalink'],
             [
                 'license_number' => 'DKI-001-Apotek-2026',
                 'pharmacist_name' => 'apt. Contoh Apoteker',

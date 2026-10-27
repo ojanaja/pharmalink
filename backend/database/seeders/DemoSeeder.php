@@ -77,7 +77,7 @@ class DemoSeeder extends Seeder
     private function seedMasters(): void
     {
         \App\Models\PharmacySetting::query()->updateOrCreate(['id' => 1], [
-            'name' => 'Apotek Sehat Sentosa',
+            'name' => 'Pharmalink',
             'license_number' => 'DKI-001-Apotek-2026',
             'pharmacist_name' => 'Apt. Bima Prasetyo',
             'address' => 'Jl. Melati No. 12, Jakarta Timur',
