@@ -1,0 +1,77 @@
+name: pharmalink
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: pharmalink-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: pharmalink
+      MYSQL_USER: pharmalink
+      MYSQL_PASSWORD: ${PHARMALINK_DB_PASSWORD:?set PHARMALINK_DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${PHARMALINK_DB_ROOT_PASSWORD:?set PHARMALINK_DB_ROOT_PASSWORD in .env}
+    volumes:
+      - pharmalink_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$ --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - internal
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    image: pharmalink-backend:prod
+    container_name: pharmalink-backend
+    restart: unless-stopped
+    environment:
+      APP_NAME: Pharmalink
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: https://pharmalink.prambanandigital.com
+      APP_LOCALE: id
+      APP_FALLBACK_LOCALE: id
+      APP_TIMEZONE: Asia/Jakarta
+      DB_CONNECTION: mysql
+      DB_HOST: pharmalink-mysql
+      DB_PORT: 3306
+      DB_DATABASE: pharmalink
+      DB_USERNAME: pharmalink
+      DB_PASSWORD: ${PHARMALINK_DB_PASSWORD:?set PHARMALINK_DB_PASSWORD in .env}
+      CACHE_STORE: file
+      SESSION_DRIVER: file
+      QUEUE_CONNECTION: database
+      LOG_LEVEL: info
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: >-
+      sh -c "[ -s .env ] || echo "APP_KEY=" > .env;
+      grep -q '^APP_KEY=.' .env || php artisan key:generate --force;
+      php artisan migrate --force
+      && php artisan db:seed --class=DemoSeeder --force
+      && php -S 0.0.0.0:8000 -t public"
+    networks:
+      - internal
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    image: pharmalink-frontend:prod
+    container_name: pharmalink-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - internal
+
+networks:
+  internal:
+    name: pharmalink_default
+
+volumes:
+  pharmalink_mysql_data:
