@@ -1,17 +1,25 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Pencil, Plus, Power, Search, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../../auth/useAuth'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Field'
+import { Input, Select, Field } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
 import { Pagination } from '../../components/ui/Pagination'
 import { SortHeader } from '../../components/ui/SortHeader'
 import { ApiError, api } from '../../lib/api'
 import { formatRupiah } from '../../lib/format'
 import { sortRows, useSort } from '../../lib/sort'
-import type { Category, LaravelPaginated, Medicine, Supplier, Unit } from '../../lib/types'
+import { useDebounce } from '../../lib/useDebounce'
+import type {
+  Category,
+  LaravelPaginated,
+  Manufacturer,
+  Medicine,
+  Supplier,
+  Unit,
+} from '../../lib/types'
 import { ImportMedicinesModal } from '../MedicinesImportModal'
 import { ExportButton } from '../reports/ExportButton'
 import { MedicineFormModal } from './MedicineFormModal'
@@ -19,6 +27,7 @@ import { SupplierFormModal } from './SupplierFormModal'
 
 const TABS = [
   { key: 'obat', label: 'Obat' },
+  { key: 'pabrikan', label: 'Pabrikan' },
   { key: 'supplier', label: 'Supplier' },
 ] as const
 
@@ -26,7 +35,7 @@ type TabKey = (typeof TABS)[number]['key']
 
 export function MasterDataPage() {
   const { user } = useAuth()
-  // MedicinePolicy backend: create/update/delete hanya owner; apoteker hanya melihat.
+  // MedicinePolicy & ManufacturerPolicy backend: create/update hanya owner; apoteker hanya melihat.
   const isOwner = user?.role === 'owner'
   const [tab, setTab] = useState<TabKey>('obat')
 
@@ -35,7 +44,7 @@ export function MasterDataPage() {
       <div>
         <h2 className="text-2xl font-bold text-ink">Master Data</h2>
         <p className="mt-1 text-sm text-ink-secondary">
-          Kelola data dasar obat, kategori, satuan, dan supplier apotek.
+          Kelola data dasar obat, pabrikan, kategori, satuan, dan supplier apotek.
         </p>
       </div>
 
@@ -58,7 +67,13 @@ export function MasterDataPage() {
         ))}
       </div>
 
-      {tab === 'obat' ? <MedicinesTab isOwner={isOwner} /> : <SuppliersTab isOwner={isOwner} />}
+      {tab === 'obat' ? (
+        <MedicinesTab isOwner={isOwner} />
+      ) : tab === 'pabrikan' ? (
+        <ManufacturersTab isOwner={isOwner} />
+      ) : (
+        <SuppliersTab isOwner={isOwner} />
+      )}
     </div>
   )
 }
@@ -69,60 +84,103 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [formOpen, setFormOpen] = useState(false)
-  const [editing, setEditing] = useState<Medicine | null>(null)
-  const [deleting, setDeleting] = useState<Medicine | null>(null)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [deletingSubmit, setDeletingSubmit] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [editing, setEditing] = useState<Medicine | null>(null)
+  const [toggleTarget, setToggleTarget] = useState<Medicine | null>(null)
+  const [manufacturerId, setManufacturerId] = useState('')
   const { sort, toggleSort } = useSort()
 
+  // Master data perlu melihat obat nonaktif — index default hanya aktif.
   const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ['medicines', page],
-    queryFn: () => api<LaravelPaginated<Medicine>>(`/medicines?page=${page}`),
+    queryKey: ['medicines', page, manufacturerId],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), include_inactive: '1' })
+      if (manufacturerId) params.set('manufacturer_id', manufacturerId)
+      return api<LaravelPaginated<Medicine>>(`/medicines?${params}`)
+    },
+    placeholderData: keepPreviousData,
   })
 
-  async function handleDelete() {
-    if (!deleting) return
-    setDeletingSubmit(true)
-    setDeleteError(null)
-    try {
-      await api(`/medicines/${deleting.id}`, { method: 'DELETE' })
-      setDeleting(null)
-      queryClient.invalidateQueries({ queryKey: ['medicines'] })
-    } catch (err) {
-      setDeleteError(err instanceof ApiError ? err.message : 'Gagal menghapus obat.')
-    } finally {
-      setDeletingSubmit(false)
+  const { data: manufacturers } = useQuery({
+    queryKey: ['manufacturers', 'filter'],
+    queryFn: () => api<{ data: Manufacturer[] }>('/manufacturers?per_page=100'),
+  })
+
+  const medicineValue = (medicine: Medicine, key: string): string | number | null => {
+    switch (key) {
+      case 'code':
+        return medicine.code
+      case 'name':
+        return medicine.name
+      case 'manufacturer':
+        return medicine.manufacturer?.name ?? null
+      case 'price':
+        return Number(medicine.sale_price)
+      case 'min':
+        return medicine.min_stock
+      default:
+        return null
     }
+  }
+
+  const visible = sortRows(data?.data ?? [], sort, medicineValue)
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ['medicines'] })
   }
 
   return (
     <>
       <div className="flex items-center justify-between gap-4">
-        <CategoryUnitManager isOwner={isOwner} />
+        <div className="w-64">
+          <Select
+            value={manufacturerId}
+            onChange={(event) => {
+              setManufacturerId(event.target.value)
+              setPage(1)
+            }}
+            aria-label="Filter pabrikan"
+          >
+            <option value="">Semua pabrikan</option>
+            {(manufacturers?.data ?? [])
+              .filter((manufacturer) => manufacturer.is_active)
+              .map((manufacturer) => (
+                <option key={manufacturer.id} value={manufacturer.id}>
+                  {manufacturer.name}
+                </option>
+              ))}
+          </Select>
+        </div>
+        {isOwner && (
+          <div className="flex gap-2">
+            <ExportButton url="/api/medicines/export" label="Export" />
+            <Button variant="secondary" size="sm" icon={<Upload size={14} />} onClick={() => setImportOpen(true)}>
+              Impor
+            </Button>
+            <Button
+              size="sm"
+              icon={<Plus size={14} />}
+              onClick={() => {
+                setEditing(null)
+                setFormOpen(true)
+              }}
+            >
+              Tambah obat
+            </Button>
+          </div>
+        )}
       </div>
+
+      <CategoryUnitManager isOwner={isOwner} />
 
       <div className="overflow-hidden rounded-card border border-line bg-surface shadow-low">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <h3 className="text-[15px] font-bold text-ink">Daftar Obat</h3>
-          {isOwner && (
-            <div className="flex gap-2">
-              <ExportButton url="/api/medicines/export" label="Export" />
-              <Button variant="secondary" size="sm" icon={<Upload size={14} />} onClick={() => setImportOpen(true)}>
-                Impor
-              </Button>
-              <Button
-                size="sm"
-                icon={<Plus size={14} />}
-                onClick={() => {
-                  setEditing(null)
-                  setFormOpen(true)
-                }}
-              >
-                Tambah obat
-              </Button>
-            </div>
-          )}
+          <div>
+            <h3 className="text-[15px] font-bold text-ink">Daftar Obat</h3>
+            <p className="mt-0.5 text-xs text-ink-secondary">
+              {data?.meta.total ?? 0} obat terdaftar (termasuk nonaktif).
+            </p>
+          </div>
         </div>
 
         {isError ? (
@@ -144,6 +202,7 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
                 <SortHeader label="Nama Obat" sortKey="name" sort={sort} onToggle={toggleSort} />
                 <th className="px-4 py-3">Kategori</th>
                 <th className="px-4 py-3">Satuan</th>
+                <SortHeader label="Pabrikan" sortKey="manufacturer" sort={sort} onToggle={toggleSort} />
                 <SortHeader label="Harga Jual" sortKey="price" sort={sort} onToggle={toggleSort} align="right" />
                 <SortHeader label="Min. Stok" sortKey="min" sort={sort} onToggle={toggleSort} align="right" />
                 <th className="px-4 py-3">Status</th>
@@ -154,7 +213,7 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
               {isPending &&
                 Array.from({ length: 5 }, (_, i) => (
                   <tr key={i} className="border-t border-line">
-                    {Array.from({ length: 8 }, (_, j) => (
+                    {Array.from({ length: 9 }, (_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-4 animate-pulse rounded bg-neutral-bg" />
                       </td>
@@ -162,68 +221,55 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
                   </tr>
                 ))}
 
-              {sortRows(data?.data ?? [], sort, (medicine, key) => {
-                switch (key) {
-                  case 'code':
-                    return medicine.code
-                  case 'name':
-                    return medicine.name
-                  case 'price':
-                    return Number(medicine.sale_price)
-                  case 'min':
-                    return medicine.min_stock
-                  default:
-                    return null
-                }
-              }).map((medicine) => {
-                return (
-                  <tr key={medicine.id} className="border-t border-line">
-                    <td className="px-5 py-3 font-medium text-ink-secondary">{medicine.code}</td>
-                    <td className="px-4 py-3 font-semibold text-ink">{medicine.name}</td>
-                    <td className="px-4 py-3 text-ink-secondary">{medicine.category?.name ?? '—'}</td>
-                    <td className="px-4 py-3 text-ink-secondary">{medicine.unit?.name ?? '—'}</td>
-                    <td className="px-4 py-3 text-right text-ink-secondary">
-                      {formatRupiah(medicine.sale_price)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-ink-secondary">
-                      {new Intl.NumberFormat('id-ID').format(medicine.min_stock)}
-                    </td>
+              {visible.map((medicine) => (
+                <tr key={medicine.id} className="border-t border-line">
+                  <td className="px-5 py-3 font-medium text-ink-secondary">{medicine.code}</td>
+                  <td className="px-4 py-3 font-semibold text-ink">{medicine.name}</td>
+                  <td className="px-4 py-3 text-ink-secondary">{medicine.category?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-ink-secondary">{medicine.unit?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-ink-secondary">{medicine.manufacturer?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-right text-ink-secondary">
+                    {formatRupiah(medicine.sale_price)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-ink-secondary">
+                    {new Intl.NumberFormat('id-ID').format(medicine.min_stock)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant={medicine.is_active ? 'success' : 'danger'}>
+                      {medicine.is_active ? 'Aktif' : 'Nonaktif'}
+                    </Badge>
+                  </td>
+                  {isOwner && (
                     <td className="px-4 py-3">
-                      <Badge variant={medicine.is_active ? 'success' : 'neutral'}>
-                        {medicine.is_active ? 'Aktif' : 'Nonaktif'}
-                      </Badge>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          aria-label={`Edit ${medicine.name}`}
+                          onClick={() => {
+                            setEditing(medicine)
+                            setFormOpen(true)
+                          }}
+                          className="text-ink-secondary transition-colors hover:text-primary"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`${medicine.is_active ? 'Nonaktifkan' : 'Aktifkan'} ${medicine.name}`}
+                          onClick={() => setToggleTarget(medicine)}
+                          className={`transition-colors ${
+                            medicine.is_active
+                              ? 'text-ink-secondary hover:text-danger-ink'
+                              : 'text-ink-secondary hover:text-success-ink'
+                          }`}
+                        >
+                          <Power size={15} />
+                        </button>
+                      </div>
                     </td>
-                    {isOwner && (
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            aria-label={`Edit ${medicine.name}`}
-                            onClick={() => {
-                              setEditing(medicine)
-                              setFormOpen(true)
-                            }}
-                            className="text-ink-secondary transition-colors hover:text-primary"
-                          >
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Hapus ${medicine.name}`}
-                            onClick={() => {
-                              setDeleting(medicine)
-                              setDeleteError(null)
-                            }}
-                            className="text-ink-secondary transition-colors hover:text-danger-ink"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                )
-              })}
+                  )}
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
@@ -246,7 +292,16 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
         onClose={() => setFormOpen(false)}
         onSaved={() => {
           setFormOpen(false)
-          queryClient.invalidateQueries({ queryKey: ['medicines'] })
+          invalidate()
+        }}
+      />
+
+      <ToggleMedicineModal
+        target={toggleTarget}
+        onClose={() => setToggleTarget(null)}
+        onSaved={() => {
+          setToggleTarget(null)
+          invalidate()
         }}
       />
 
@@ -255,32 +310,71 @@ function MedicinesTab({ isOwner }: { isOwner: boolean }) {
         onClose={() => setImportOpen(false)}
         onImported={() => queryClient.invalidateQueries({ queryKey: ['medicines'] })}
       />
+    </>
+  )
+}
 
-      <Modal
-        open={deleting !== null}
-        title="Hapus data obat?"
-        onClose={() => setDeleting(null)}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setDeleting(null)}>
-              Batal
-            </Button>
-            <Button variant="danger" loading={deletingSubmit} onClick={handleDelete}>
-              Hapus
-            </Button>
-          </>
-        }
-      >
+/** Obat nonaktif tidak dijual/diterima (index default hanya aktif) tapi tetap tersimpan di master. */
+function ToggleMedicineModal({
+  target,
+  onClose,
+  onSaved,
+}: {
+  target: Medicine | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const deactivating = target?.is_active ?? false
+
+  async function handleToggle() {
+    if (!target) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api(`/medicines/${target.id}/toggle-active`, { method: 'POST', body: {} })
+      onSaved()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Gagal mengubah status obat.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={target !== null}
+      title={deactivating ? `Nonaktifkan obat ${target?.name ?? ''}?` : `Aktifkan obat ${target?.name ?? ''}?`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Batal
+          </Button>
+          <Button
+            variant={deactivating ? 'danger' : 'primary'}
+            loading={submitting}
+            onClick={handleToggle}
+          >
+            {deactivating ? 'Ya, nonaktifkan' : 'Ya, aktifkan'}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
         <p>
-          {deleting?.name} akan dihapus dari master data. Riwayat transaksi tetap tersimpan.
+          {deactivating
+            ? 'Obat tidak akan muncul di kasir dan tidak dapat diterima stoknya, riwayat transaksi tetap tersimpan.'
+            : 'Obat dapat kembali dijual dan diterima stoknya.'}
         </p>
-        {deleteError && (
-          <div role="alert" className="mt-3 rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger-ink">
-            {deleteError}
+        {error && (
+          <div role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger-ink">
+            {error}
           </div>
         )}
-      </Modal>
-    </>
+      </div>
+    </Modal>
   )
 }
 
@@ -361,6 +455,380 @@ function CategoryUnitManager({ isOwner }: { isOwner: boolean }) {
       ))}
       {addError && <p className="col-span-2 text-xs text-danger-ink">{addError}</p>}
     </div>
+  )
+}
+
+/* -------------------------------- Pabrikan -------------------------------- */
+
+function ManufacturersTab({ isOwner }: { isOwner: boolean }) {
+  const queryClient = useQueryClient()
+  const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search)
+  const [formOpen, setFormOpen] = useState(false)
+  const [editing, setEditing] = useState<Manufacturer | null>(null)
+  const [toggleTarget, setToggleTarget] = useState<Manufacturer | null>(null)
+  const { sort, toggleSort } = useSort()
+
+  const { data, isPending, isError, refetch } = useQuery({
+    queryKey: ['manufacturers', page, debouncedSearch],
+    queryFn: () =>
+      api<LaravelPaginated<Manufacturer>>(
+        `/manufacturers?page=${page}&search=${encodeURIComponent(debouncedSearch)}`,
+      ),
+    placeholderData: keepPreviousData,
+  })
+
+  const visible = sortRows(data?.data ?? [], sort, (manufacturer, key) => {
+    switch (key) {
+      case 'code':
+        return manufacturer.code
+      case 'name':
+        return manufacturer.name
+      default:
+        return null
+    }
+  })
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ['manufacturers'] })
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-4">
+        <div className="relative w-72">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-placeholder"
+            aria-hidden="true"
+          />
+          <Input
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setPage(1)
+            }}
+            placeholder="Cari kode atau nama pabrikan…"
+            className="pl-9"
+            aria-label="Cari pabrikan"
+          />
+        </div>
+        {isOwner && (
+          <Button
+            size="sm"
+            icon={<Plus size={14} />}
+            onClick={() => {
+              setEditing(null)
+              setFormOpen(true)
+            }}
+          >
+            Tambah pabrikan
+          </Button>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-card border border-line bg-surface shadow-low">
+        {isError ? (
+          <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
+            <p className="text-sm text-danger-ink">Gagal memuat data pabrikan.</p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="text-[13px] font-bold text-primary hover:underline"
+            >
+              Coba lagi
+            </button>
+          </div>
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="bg-table-header text-[10px] font-bold uppercase tracking-wide text-ink-secondary">
+                <SortHeader label="Kode" sortKey="code" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="Nama" sortKey="name" sort={sort} onToggle={toggleSort} />
+                <th className="px-4 py-3">Alamat</th>
+                <th className="px-4 py-3">Kontak</th>
+                <th className="px-4 py-3 text-right">Obat</th>
+                <th className="px-4 py-3">Status</th>
+                {isOwner && <th className="px-4 py-3" aria-label="Aksi" />}
+              </tr>
+            </thead>
+            <tbody>
+              {isPending &&
+                Array.from({ length: 4 }, (_, i) => (
+                  <tr key={i} className="border-t border-line">
+                    {Array.from({ length: 7 }, (_, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <div className="h-4 animate-pulse rounded bg-neutral-bg" />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+
+              {data && visible.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-6 py-16 text-center text-sm text-ink-secondary">
+                    Belum ada pabrikan terdaftar.
+                  </td>
+                </tr>
+              )}
+
+              {visible.map((manufacturer) => (
+                <tr key={manufacturer.id} className="border-t border-line">
+                  <td className="px-5 py-3 font-medium text-ink-secondary">{manufacturer.code}</td>
+                  <td className="px-4 py-3 font-semibold text-ink">{manufacturer.name}</td>
+                  <td className="px-4 py-3 text-ink-secondary">{manufacturer.address ?? '—'}</td>
+                  <td className="px-4 py-3 text-ink-secondary">{manufacturer.contact ?? '—'}</td>
+                  <td className="px-4 py-3 text-right text-ink-secondary">
+                    {manufacturer.medicines_count}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant={manufacturer.is_active ? 'success' : 'danger'}>
+                      {manufacturer.is_active ? 'Aktif' : 'Nonaktif'}
+                    </Badge>
+                  </td>
+                  {isOwner && (
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          aria-label={`Edit ${manufacturer.name}`}
+                          onClick={() => {
+                            setEditing(manufacturer)
+                            setFormOpen(true)
+                          }}
+                          className="text-ink-secondary transition-colors hover:text-primary"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`${manufacturer.is_active ? 'Nonaktifkan' : 'Aktifkan'} ${manufacturer.name}`}
+                          onClick={() => setToggleTarget(manufacturer)}
+                          className={`transition-colors ${
+                            manufacturer.is_active
+                              ? 'text-ink-secondary hover:text-danger-ink'
+                              : 'text-ink-secondary hover:text-success-ink'
+                          }`}
+                        >
+                          <Power size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {data && (
+          <Pagination
+            currentPage={data.meta.current_page}
+            lastPage={data.meta.last_page}
+            total={data.meta.total}
+            from={data.meta.from ?? 0}
+            to={data.meta.to ?? 0}
+            onPageChange={setPage}
+          />
+        )}
+      </div>
+
+      <ManufacturerFormModal
+        open={formOpen}
+        manufacturer={editing}
+        onClose={() => setFormOpen(false)}
+        onSaved={() => {
+          setFormOpen(false)
+          invalidate()
+        }}
+      />
+
+      <ToggleManufacturerModal
+        target={toggleTarget}
+        onClose={() => setToggleTarget(null)}
+        onSaved={() => {
+          setToggleTarget(null)
+          invalidate()
+        }}
+      />
+    </>
+  )
+}
+
+function ManufacturerFormModal({
+  open,
+  manufacturer,
+  onClose,
+  onSaved,
+}: {
+  open: boolean
+  manufacturer: Manufacturer | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const isEdit = manufacturer !== null
+  const [form, setForm] = useState({ code: '', name: '', address: '', contact: '' })
+  const [initialized, setInitialized] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (open && !initialized) {
+    setForm({
+      code: manufacturer?.code ?? '',
+      name: manufacturer?.name ?? '',
+      address: manufacturer?.address ?? '',
+      contact: manufacturer?.contact ?? '',
+    })
+    setInitialized(true)
+    setError(null)
+  }
+  if (!open && initialized) {
+    setInitialized(false)
+  }
+
+  async function handleSubmit() {
+    setSubmitting(true)
+    setError(null)
+    const body = {
+      code: form.code.trim(),
+      name: form.name.trim(),
+      address: form.address.trim() === '' ? null : form.address.trim(),
+      contact: form.contact.trim() === '' ? null : form.contact.trim(),
+    }
+    try {
+      if (isEdit) {
+        await api(`/manufacturers/${manufacturer.id}`, { method: 'PUT', body })
+      } else {
+        await api('/manufacturers', { method: 'POST', body })
+      }
+      setInitialized(false)
+      onSaved()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Gagal menyimpan pabrikan. Coba lagi.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const canSubmit = form.code.trim() !== '' && form.name.trim() !== '' && !submitting
+
+  return (
+    <Modal
+      open={open}
+      title={isEdit ? `Edit Pabrikan — ${manufacturer.name}` : 'Tambah Pabrikan'}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Batal
+          </Button>
+          <Button loading={submitting} disabled={!canSubmit} onClick={handleSubmit}>
+            {isEdit ? 'Simpan perubahan' : 'Tambah pabrikan'}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Kode *">
+            <Input
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value })}
+              placeholder="MNF-KBF"
+            />
+          </Field>
+          <Field label="Nama *">
+            <Input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Kalbe Farma"
+            />
+          </Field>
+        </div>
+        <Field label="Kontak">
+          <Input
+            value={form.contact}
+            onChange={(e) => setForm({ ...form, contact: e.target.value })}
+            placeholder="021-…"
+          />
+        </Field>
+        <Field label="Alamat">
+          <Input
+            value={form.address}
+            onChange={(e) => setForm({ ...form, address: e.target.value })}
+          />
+        </Field>
+        {error && (
+          <div role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger-ink">
+            {error}
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+function ToggleManufacturerModal({
+  target,
+  onClose,
+  onSaved,
+}: {
+  target: Manufacturer | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const deactivating = target?.is_active ?? false
+
+  async function handleToggle() {
+    if (!target) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api(`/manufacturers/${target.id}/toggle-active`, { method: 'POST', body: {} })
+      onSaved()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Gagal mengubah status pabrikan.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={target !== null}
+      title={deactivating ? `Nonaktifkan pabrikan ${target?.name ?? ''}?` : `Aktifkan pabrikan ${target?.name ?? ''}?`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Batal
+          </Button>
+          <Button
+            variant={deactivating ? 'danger' : 'primary'}
+            loading={submitting}
+            onClick={handleToggle}
+          >
+            {deactivating ? 'Ya, nonaktifkan' : 'Ya, aktifkan'}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <p>
+          {deactivating
+            ? 'Pabrikan tidak dapat dipilih untuk obat baru; data obat yang sudah terkait tetap tersimpan.'
+            : 'Pabrikan dapat dipilih kembali untuk obat baru.'}
+        </p>
+        {error && (
+          <div role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger-ink">
+            {error}
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }
 

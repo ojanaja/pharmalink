@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BatchController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\ManufacturerController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\MedicineController;
 use App\Http\Controllers\Api\MedicineImportController;
@@ -31,6 +32,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn (Request $request) => new UserResource($request->user()));
 
     Route::get('medicines/export', [MedicineController::class, 'export']);
+    Route::post('medicines/{medicine}/toggle-active', [MedicineController::class, 'toggleActive']);
     Route::get('medicines/import/template', [MedicineImportController::class, 'template'])->middleware('role:owner');
     Route::post('medicines/import', [MedicineImportController::class, 'import'])->middleware('role:owner');
     Route::apiResource('medicines', MedicineController::class);
@@ -43,6 +45,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('sales/{sale}', [SaleController::class, 'show']);
     Route::post('sales/{sale}/void', [SaleController::class, 'void']);
     Route::post('sales/{sale}/returns', [SaleReturnController::class, 'store']);
+
+    // Master pabrikan: lihat semua, kelola owner only (pola Supplier).
+    Route::get('manufacturers', [ManufacturerController::class, 'index']);
+    Route::post('manufacturers', [ManufacturerController::class, 'store']);
+    Route::get('manufacturers/{manufacturer}', [ManufacturerController::class, 'show']);
+    Route::put('manufacturers/{manufacturer}', [ManufacturerController::class, 'update']);
+    Route::post('manufacturers/{manufacturer}/toggle-active', [ManufacturerController::class, 'toggleActive']);
 
     // Purchase order + penerimaan PO (owner & apoteker boleh).
     Route::get('purchase-orders/summary/monthly', [PurchaseOrderController::class, 'monthlySummary']);

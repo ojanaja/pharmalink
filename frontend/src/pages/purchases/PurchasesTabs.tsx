@@ -1,11 +1,11 @@
 import { NavLink, Outlet } from 'react-router-dom'
 
 const SUB_TABS = [
-  { path: '/pembelian', label: 'Daftar PO', end: true },
+  { path: '/pembelian', label: 'Pembelian', end: true },
   { path: '/pembelian/retur', label: 'Retur Pembelian', end: false },
 ]
 
-/** Sub-nav kecil halaman Pembelian — pola sama dengan Penjualan (Kasir | Riwayat). */
+/** Sub-nav kecil halaman Pembelian — transaksi di index, pencatatan retur di sub-tab. */
 export function PurchasesTabs() {
   return (
     <div className="flex flex-col gap-4">

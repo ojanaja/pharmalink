@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button'
 import { Field, Input, Select } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
 import { ApiError, api } from '../../lib/api'
-import type { Category, Medicine, Unit } from '../../lib/types'
+import type { Category, Manufacturer, Medicine, Unit } from '../../lib/types'
 
 interface MedicineFormModalProps {
   open: boolean
@@ -21,6 +21,7 @@ export function MedicineFormModal({ open, medicine, onClose, onSaved }: Medicine
     name: '',
     category_id: '',
     unit_id: '',
+    manufacturer_id: '',
     sale_price: '',
     min_stock: '',
     description: '',
@@ -35,6 +36,8 @@ export function MedicineFormModal({ open, medicine, onClose, onSaved }: Medicine
       name: medicine?.name ?? '',
       category_id: medicine?.category ? String(medicine.category.id) : '',
       unit_id: medicine?.unit ? String(medicine.unit.id) : '',
+      // Pabrikan nullable di DB — edit obat lama boleh tetap kosong.
+      manufacturer_id: medicine?.manufacturer ? String(medicine.manufacturer.id) : '',
       sale_price: medicine ? String(Number(medicine.sale_price)) : '',
       min_stock: medicine ? String(medicine.min_stock) : '',
       // Deskripsi wajib dimuat ulang saat edit agar tidak tertimpa null (kehilangan data).
@@ -57,6 +60,13 @@ export function MedicineFormModal({ open, medicine, onClose, onSaved }: Medicine
     queryFn: () => api<{ data: Unit[] }>('/units'),
     enabled: open,
   })
+  const { data: manufacturers } = useQuery({
+    queryKey: ['manufacturers', 'all'],
+    queryFn: () => api<{ data: Manufacturer[] }>('/manufacturers?per_page=100'),
+    enabled: open,
+  })
+  // Hanya pabrikan aktif yang bisa dipilih untuk obat baru.
+  const activeManufacturers = (manufacturers?.data ?? []).filter((m) => m.is_active)
 
   function setField(field: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -70,6 +80,8 @@ export function MedicineFormModal({ open, medicine, onClose, onSaved }: Medicine
       name: form.name.trim(),
       category_id: Number(form.category_id),
       unit_id: Number(form.unit_id),
+      // Wajib saat tambah (backend); kosong/null hanya untuk edit obat lama.
+      manufacturer_id: form.manufacturer_id === '' ? null : Number(form.manufacturer_id),
       sale_price: Number(form.sale_price),
       min_stock: form.min_stock === '' ? 0 : Number(form.min_stock),
       description: form.description.trim() === '' ? null : form.description.trim(),
@@ -96,6 +108,7 @@ export function MedicineFormModal({ open, medicine, onClose, onSaved }: Medicine
     form.name.trim() !== '' &&
     form.category_id !== '' &&
     form.unit_id !== '' &&
+    (isEdit || form.manufacturer_id !== '') &&
     form.sale_price !== '' &&
     Number(form.sale_price) >= 0 &&
     !submitting
@@ -144,6 +157,24 @@ export function MedicineFormModal({ open, medicine, onClose, onSaved }: Medicine
               ))}
             </Select>
           </Field>
+          <Field label={isEdit ? 'Pabrikan' : 'Pabrikan *'}>
+            <Select
+              value={form.manufacturer_id}
+              onChange={(e) => setField('manufacturer_id', e.target.value)}
+            >
+              <option value="">Tanpa pabrikan</option>
+              {activeManufacturers.map((manufacturer) => (
+                <option key={manufacturer.id} value={manufacturer.id}>
+                  {manufacturer.code} — {manufacturer.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {!isEdit && activeManufacturers.length === 0 && (
+            <p className="col-span-2 -mt-2 rounded-lg bg-warning-bg px-3 py-2 text-[11px] text-warning-ink">
+              Belum ada pabrikan aktif — tambahkan dulu di tab Pabrikan.
+            </p>
+          )}
           <Field label="Harga jual (Rp) *">
             <Input
               type="number"

@@ -20,6 +20,8 @@ class StoreMedicineRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'category_id' => ['required', 'integer', Rule::exists('categories', 'id')],
             'unit_id' => ['required', 'integer', Rule::exists('units', 'id')],
+            // Pabrikan wajib untuk obat baru (data existing boleh null).
+            'manufacturer_id' => ['required', 'integer', Rule::exists('manufacturers', 'id')],
             'sale_price' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
             'min_stock' => ['integer', 'min:0'],
             'description' => ['nullable', 'string'],

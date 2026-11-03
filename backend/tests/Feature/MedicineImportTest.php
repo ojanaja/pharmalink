@@ -80,7 +80,7 @@ class MedicineImportTest extends TestCase
 
         $master = $spreadsheet->createSheet();
         $master->setTitle('Master Data Obat');
-        $master->fromArray(['Kode', 'Nama Obat', 'Satuan', 'Harga jual', 'Minimum stok'], null, 'A1');
+        $master->fromArray(['Kode', 'Nama Obat', 'Satuan', 'Pabrikan', 'Harga jual', 'Minimum stok'], null, 'A1');
         $master->fromArray($masterRows, null, 'A2');
 
         $path = tempnam(sys_get_temp_dir(), 'xlsx');
@@ -117,8 +117,8 @@ class MedicineImportTest extends TestCase
     public function test_impor_lengkap_dua_sheet_sukses(): void
     {
         $masterRows = [
-            ['', 'Vitamin D3 1000IU', 'Tablet', 15000, 10],      // kode auto-generate
-            ['OBAT-PCT', 'Paracetamol 500mg', '', 3500, 15],     // update obat existing
+            ['', 'Vitamin D3 1000IU', 'Tablet', 'Kalbe Farma', 15000, 10], // kode auto-generate
+            ['OBAT-PCT', 'Paracetamol 500mg', '', '', 3500, 15],   // update obat existing
         ];
         $stockRows = [
             ['OBAT-PCT', 'Paracetamol 500mg', 'BTH-PCT-001', 10, null, 'Penyesuaian stok opname'],
@@ -137,11 +137,12 @@ class MedicineImportTest extends TestCase
         $this->assertSame(2, $summary['stock_rows_applied']);
         $this->assertSame(2, $summary['movements_created']);
 
-        // Obat baru: kode OBAT-XXXXXX, kategori default Umum, satuan baru terbuat.
+        // Obat baru: kode OBAT-XXXXXX, kategori default Umum, satuan & pabrikan baru terbuat.
         $newMedicine = Medicine::where('code', 'like', 'OBAT-%')->where('code', '!=', 'OBAT-PCT')->sole();
         $this->assertMatchesRegularExpression('/^OBAT-[A-Z0-9]{6}$/', $newMedicine->code);
         $this->assertSame('Umum', $newMedicine->category->name);
         $this->assertSame('Tablet', $newMedicine->unit->name);
+        $this->assertSame('Kalbe Farma', $newMedicine->manufacturer->name);
         $this->assertSame('15000.00', (string) $newMedicine->sale_price);
 
         // Obat existing ter-update.
@@ -243,6 +244,20 @@ class MedicineImportTest extends TestCase
         $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
         $response->assertUnprocessable()
             ->assertJsonPath('errors.rows.0.errors.0', 'Kode obat OBAT-HANTU tidak ditemukan.');
+    }
+
+    public function test_obat_baru_tanpa_pabrikan_422(): void
+    {
+        $file = $this->xlsxFile(
+            [['OBAT-NEW', 'Obat Baru', 'Botol', '', 20000, 5]],
+            [],
+        );
+
+        $response = $this->withToken($this->token())->post('/api/medicines/import', ['file' => $file]);
+        $response->assertUnprocessable();
+        $this->assertSame('Pabrikan wajib diisi untuk obat baru.', $response->json('errors.rows.0.errors.0'));
+
+        $this->assertNull(Medicine::where('code', 'OBAT-NEW')->first());
     }
 
     public function test_impor_bukan_xlsx_ditolak(): void

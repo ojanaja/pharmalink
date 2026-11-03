@@ -20,7 +20,10 @@ class StorePurchaseOrderRequest extends FormRequest
             'expected_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:today'],
             'note' => ['nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.medicine_id' => ['required', 'integer', Rule::exists('medicines', 'id')],
+            'items.*.medicine_id' => [
+                'required', 'integer',
+                Rule::exists('medicines', 'id')->where('is_active', true),
+            ],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             // Harga beli; bila null diambil dari pivot medicine_supplier.
             'items.*.unit_price' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],

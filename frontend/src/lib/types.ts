@@ -4,6 +4,7 @@ export interface Medicine {
   name: string
   category: { id: number; name: string } | null
   unit: { id: number; name: string } | null
+  manufacturer: { id: number; code: string; name: string } | null
   sale_price: string
   min_stock: number
   stock_total: string | null
@@ -141,6 +142,16 @@ export interface Supplier {
   address: string | null
   /** Pivot harga beli — hanya ada di endpoint show. */
   medicines?: Array<{ medicine_id: number; code: string; name: string; purchase_price: string }>
+}
+
+export interface Manufacturer {
+  id: number
+  code: string
+  name: string
+  address: string | null
+  contact: string | null
+  is_active: boolean
+  medicines_count: number
 }
 
 export interface Category {

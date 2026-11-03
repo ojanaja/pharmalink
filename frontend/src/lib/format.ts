@@ -13,19 +13,6 @@ export function todayLocal(): string {
   return `${now.getFullYear()}-${month}-${day}`
 }
 
-/** Nomor batch otomatis: "B-PARACETAMOL-20261016" — nama obat + tanggal penerimaan, tetap bisa diedit manual. */
-export function autoBatchNumber(medicineName: string, receivedDate: string): string {
-  const slug = medicineName
-    .toUpperCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^A-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 30)
-  const date = (receivedDate || todayLocal()).replaceAll('-', '')
-  return `B-${slug || 'OBAT'}-${date}`
-}
-
 /** Periode default laporan = bulan berjalan (zona Asia/Jakarta), format Y-m-d untuk API. */
 export function currentMonthPeriod(): { from: string; to: string } {
   const now = new Date()

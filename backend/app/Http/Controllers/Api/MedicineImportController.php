@@ -31,14 +31,13 @@ class MedicineImportController extends Controller
 
         $master = $spreadsheet->createSheet();
         $master->setTitle('Master Data Obat');
-        $master->fromArray(['Kode', 'Nama Obat', 'Satuan', 'Harga jual', 'Minimum stok'], null, 'A1');
-        $master->fromArray([['(Auto Generate)', 'Vitamin D3 1000IU', 'Tablet', 15000, 10]], null, 'A2');
+        $master->fromArray(['Kode', 'Nama Obat', 'Satuan', 'Pabrikan', 'Harga jual', 'Minimum stok'], null, 'A1');
+        $master->fromArray([['(Auto Generate)', 'Vitamin D3 1000IU', 'Tablet', 'Kalbe Farma', 15000, 10]], null, 'A2');
         $master->getStyle('A1')->getFont()->setBold(true);
 
-        foreach ([$stock, $master] as $sheet) {
-            foreach (range('A', 'F') as $col) {
-                $sheet->getColumnDimension($col)->setAutoSize(true);
-            }
+        foreach (range('A', 'F') as $col) {
+            $stock->getColumnDimension($col)->setAutoSize(true);
+            $master->getColumnDimension($col)->setAutoSize(true);
         }
 
         $writer = new Xlsx($spreadsheet);

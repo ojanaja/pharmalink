@@ -17,7 +17,11 @@ class StoreSaleRequest extends FormRequest
     {
         return [
             'items' => ['required', 'array', 'min:1'],
-            'items.*.medicine_id' => ['required', 'integer', Rule::exists('medicines', 'id')],
+            'items.*.medicine_id' => [
+                'required', 'integer',
+                // Obat nonaktif tidak boleh dijual.
+                Rule::exists('medicines', 'id')->where('is_active', true),
+            ],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             // Harga sengaja tidak diterima dari client; diambil server-side.
             'discount' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],

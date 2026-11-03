@@ -20,6 +20,7 @@ class Medicine extends Model
         'sale_price',
         'min_stock',
         'description',
+        'manufacturer_id',
         'is_active',
     ];
 
@@ -40,6 +41,11 @@ class Medicine extends Model
     public function unit(): BelongsTo
     {
         return $this->belongsTo(Unit::class);
+    }
+
+    public function manufacturer(): BelongsTo
+    {
+        return $this->belongsTo(Manufacturer::class);
     }
 
     public function batches(): HasMany

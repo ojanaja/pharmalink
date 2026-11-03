@@ -38,7 +38,7 @@ class MedicineImportService
 
     private const SHEET_MASTER_HINT = 'Master Data';
 
-    private const MASTER_HEADERS = ['Kode', 'Nama Obat', 'Satuan', 'Harga jual', 'Minimum stok'];
+    private const MASTER_HEADERS = ['Kode', 'Nama Obat', 'Satuan', 'Pabrikan', 'Harga jual', 'Minimum stok'];
 
     private const STOCK_HEADERS = ['Kode', 'Nama Obat', 'Nomor Batch', 'Stock Masuk', 'Stock Keluar', 'Keterangan'];
 
@@ -142,8 +142,9 @@ class MedicineImportService
             $auto = $kode === '' || strcasecmp($kode, '(Auto Generate)') === 0;
             $nama = $this->str($row[1] ?? null);
             $satuan = $this->str($row[2] ?? null);
-            $harga = $this->normalizeNumber($row[3] ?? null);
-            $minStock = $this->normalizeNumber($row[4] ?? null);
+            $pabrikan = $this->str($row[3] ?? null);
+            $harga = $this->normalizeNumber($row[4] ?? null);
+            $minStock = $this->normalizeNumber($row[5] ?? null);
 
             if (! $auto) {
                 if (isset($seenCodes[$kode])) {
@@ -159,9 +160,14 @@ class MedicineImportService
 
             $medicine = ! $auto && $kode !== '' ? Medicine::query()->where('code', $kode)->first() : null;
 
-            // Satuan wajib untuk obat baru (master sheet selalu punya kolomnya).
+            // Satuan & pabrikan wajib untuk obat baru (master sheet selalu punya kolomnya);
+            // untuk obat existing, kosong berarti pertahankan nilai lama.
             if ($medicine === null && $satuan === '') {
                 $rowErrors[] = 'Satuan wajib diisi untuk obat baru.';
+            }
+
+            if ($medicine === null && $pabrikan === '') {
+                $rowErrors[] = 'Pabrikan wajib diisi untuk obat baru.';
             }
 
             if (! is_numeric($harga) || (float) $harga < 0) {
@@ -180,6 +186,7 @@ class MedicineImportService
                     'auto' => $auto,
                     'nama' => $nama,
                     'satuan' => $satuan,
+                    'pabrikan' => $pabrikan,
                     'harga' => number_format((float) $harga, 2, '.', ''),
                     'min_stock' => $this->isInt($minStock) ? (int) $minStock : 0,
                 ];
@@ -219,7 +226,8 @@ class MedicineImportService
                 $rowErrors[] = 'Kode wajib diisi.';
             }
 
-            $medicine = $kode !== '' ? Medicine::query()->where('code', $kode)->first() : null;
+            // Obat nonaktif disembunyikan dari operasional (termasuk impor stok).
+            $medicine = $kode !== '' ? Medicine::query()->where('code', $kode)->where('is_active', true)->first() : null;
 
             if ($kode !== '' && $medicine === null && ! in_array($kode, $masterCodes, true)) {
                 $rowErrors[] = "Kode obat {$kode} tidak ditemukan.";
@@ -307,6 +315,7 @@ class MedicineImportService
                     'name' => $row['nama'],
                     'category_id' => $umumId,
                     'unit_id' => $this->unitId($row['satuan']),
+                    'manufacturer_id' => $this->manufacturerId($row['pabrikan']),
                     'sale_price' => $row['harga'],
                     'min_stock' => $row['min_stock'],
                 ]);
@@ -317,6 +326,9 @@ class MedicineImportService
                 $medicine->min_stock = $row['min_stock'];
                 if ($row['satuan'] !== '') {
                     $medicine->unit_id = $this->unitId($row['satuan']);
+                }
+                if ($row['pabrikan'] !== '') {
+                    $medicine->manufacturer_id = $this->manufacturerId($row['pabrikan']);
                 }
                 $medicine->save();
                 $summary['medicines_updated']++;
@@ -394,6 +406,19 @@ class MedicineImportService
     {
         return Unit::query()->where('name', 'like', $name)->first()?->id
             ?? Unit::create(['name' => $name])->id;
+    }
+
+    /**
+     * Pabrikan: pola sama dengan satuan — match by nama case-insensitive,
+     * auto-create bila belum ada.
+     */
+    protected function manufacturerId(string $name): int
+    {
+        return \App\Models\Manufacturer::query()->where('name', 'like', $name)->first()?->id
+            ?? \App\Models\Manufacturer::create([
+                'code' => 'MNF-'.strtoupper(Str::random(6)),
+                'name' => $name,
+            ])->id;
     }
 
     protected function str(mixed $cell): string

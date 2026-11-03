@@ -21,6 +21,11 @@ class MedicineResource extends JsonResource
                 'id' => $this->unit->id,
                 'name' => $this->unit->name,
             ]),
+            'manufacturer' => $this->whenLoaded('manufacturer', fn () => [
+                'id' => $this->manufacturer->id,
+                'code' => $this->manufacturer->code,
+                'name' => $this->manufacturer->name,
+            ]),
             'sale_price' => $this->sale_price,
             'min_stock' => $this->min_stock,
             'description' => $this->description,

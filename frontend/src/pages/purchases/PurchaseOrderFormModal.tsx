@@ -17,7 +17,7 @@ interface PoFormItem {
 interface PurchaseOrderFormModalProps {
   open: boolean
   onClose: () => void
-  onCreated: () => void
+  onCreated: (poNumber: string) => void
 }
 
 const EMPTY_ITEM: PoFormItem = { medicine_id: null, quantity: 1, unit_price: '' }
@@ -67,7 +67,7 @@ export function PurchaseOrderFormModal({ open, onClose, onCreated }: PurchaseOrd
     setSubmitting(true)
     setError(null)
     try {
-      await api('/purchase-orders', {
+      const created = await api<{ data: { po_number: string } }>('/purchase-orders', {
         method: 'POST',
         body: {
           supplier_id: Number(supplierId),
@@ -81,7 +81,7 @@ export function PurchaseOrderFormModal({ open, onClose, onCreated }: PurchaseOrd
         },
       })
       reset()
-      onCreated()
+      onCreated(created.data.po_number)
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : 'Gagal membuat pembelian. Periksa koneksi dan coba lagi.',

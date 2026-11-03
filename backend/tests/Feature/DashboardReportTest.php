@@ -39,7 +39,7 @@ class DashboardReportTest extends TestCase
         // A: stok menipis (4 <= min 5), tanpa harga beli.
         $this->medicineA = $make('MED-001', 'Paracetamol 500mg', '3000.00', 5);
         $this->medicineA->batches()->create([
-            'batch_number' => 'BTH-A-001', 'expiry_date' => now()->addMonth()->toDateString(), 'quantity_on_hand' => 4,
+            'batch_number' => 'BTH-A-001', 'expiry_date' => now()->addMonths(3)->toDateString(), 'quantity_on_hand' => 4,
         ]);
 
         // B: stok habis (tanpa batch).

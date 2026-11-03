@@ -61,13 +61,15 @@ export function CashierPage() {
   const [sale, setSale] = useState<SaleCreated | null>(null)
   const [lastCart, setLastCart] = useState<CartItem[]>([])
 
+  // Search-first: query obat hanya jalan bila pencarian ≥2 karakter — jangan load semua obat.
+  const searchReady = debouncedSearch.trim().length >= 2
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['medicines-search', debouncedSearch],
     queryFn: () =>
       api<LaravelPaginated<Medicine>>(
         `/medicines?search=${encodeURIComponent(debouncedSearch)}`,
       ),
-    enabled: sale === null,
+    enabled: sale === null && searchReady,
   })
 
   const subtotal = useMemo(
@@ -81,16 +83,16 @@ export function CashierPage() {
   const paidNum = parseNumber(paid)
   const paidShort = total - paidNum
 
-  function addToCart(medicine: Medicine) {
+  function addToCart(medicine: Medicine, quantity = 1) {
     setSubmitError(null)
     setCart((prev) => {
       const existing = prev.find((item) => item.medicine.id === medicine.id)
       if (existing) {
         return prev.map((item) =>
-          item.medicine.id === medicine.id ? { ...item, quantity: item.quantity + 1 } : item,
+          item.medicine.id === medicine.id ? { ...item, quantity: item.quantity + quantity } : item,
         )
       }
-      return [...prev, { medicine, quantity: 1 }]
+      return [...prev, { medicine, quantity }]
     })
   }
 
@@ -230,7 +232,15 @@ export function CashierPage() {
                       </tr>
                     ))}
 
-                  {data && data.data.length === 0 && (
+                  {!searchReady && !isPending && (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-16 text-center text-sm text-ink-secondary">
+                        Ketik minimal 2 karakter untuk mencari obat.
+                      </td>
+                    </tr>
+                  )}
+
+                  {searchReady && data && data.data.length === 0 && (
                     <tr>
                       <td colSpan={4} className="px-6 py-16 text-center text-sm text-ink-secondary">
                         Tidak ada obat yang cocok dengan pencarian.
@@ -238,38 +248,13 @@ export function CashierPage() {
                     </tr>
                   )}
 
-                  {data?.data.map((medicine) => {
-                    const stock = Number(medicine.stock_total ?? 0)
-                    const outOfStock = stock <= 0
-                    return (
-                      <tr key={medicine.id} className="border-t border-line">
-                        <td className="px-5 py-3">
-                          <p className="text-[13px] font-semibold text-ink">{medicine.name}</p>
-                          <p className="text-[11px] text-ink-secondary">{medicine.code}</p>
-                        </td>
-                        <td
-                          className={`px-4 py-3 text-[13px] ${
-                            outOfStock ? 'font-semibold text-danger-ink' : 'text-ink-secondary'
-                          }`}
-                        >
-                          {new Intl.NumberFormat('id-ID').format(stock)} {medicine.unit?.name ?? ''}
-                        </td>
-                        <td className="px-4 py-3 text-right text-[13px] text-ink">
-                          {formatRupiah(medicine.sale_price)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Button
-                            size="sm"
-                            variant={outOfStock ? 'secondary' : 'primary'}
-                            disabled={outOfStock}
-                            onClick={() => addToCart(medicine)}
-                          >
-                            {outOfStock ? 'Habis' : 'Tambah'}
-                          </Button>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                  {data?.data.map((medicine) => (
+                    <SearchResultRow
+                      key={medicine.id}
+                      medicine={medicine}
+                      onAdd={(qty) => addToCart(medicine, qty)}
+                    />
+                  ))}
                 </tbody>
               </table>
             )}
@@ -449,5 +434,67 @@ export function CashierPage() {
         </form>
       </div>
     </div>
+  )
+}
+
+/** Baris hasil pencarian kasir — qty free-text (Enter juga menambahkan). */
+function SearchResultRow({
+  medicine,
+  onAdd,
+}: {
+  medicine: Medicine
+  onAdd: (quantity: number) => void
+}) {
+  const [qty, setQty] = useState(1)
+  const stock = Number(medicine.stock_total ?? 0)
+  const outOfStock = stock <= 0
+  const qtyNum = Number(qty)
+
+  function add() {
+    if (!outOfStock && qtyNum >= 1) {
+      onAdd(Math.floor(qtyNum))
+      setQty(1)
+    }
+  }
+
+  return (
+    <tr className="border-t border-line">
+      <td className="px-5 py-3">
+        <p className="text-[13px] font-semibold text-ink">{medicine.name}</p>
+        <p className="text-[11px] text-ink-secondary">{medicine.code}</p>
+      </td>
+      <td
+        className={`px-4 py-3 text-[13px] ${
+          outOfStock ? 'font-semibold text-danger-ink' : 'text-ink-secondary'
+        }`}
+      >
+        {new Intl.NumberFormat('id-ID').format(stock)} {medicine.unit?.name ?? ''}
+      </td>
+      <td className="px-4 py-3 text-right text-[13px] text-ink">
+        {formatRupiah(medicine.sale_price)}
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center justify-end gap-2">
+          <input
+            type="number"
+            min={1}
+            value={qty}
+            disabled={outOfStock}
+            onChange={(event) => setQty(Number(event.target.value))}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                add()
+              }
+            }}
+            aria-label={`Jumlah ${medicine.name}`}
+            className="h-8 w-16 rounded-lg border border-input-border px-2 text-right text-[13px] text-ink outline-none transition-colors focus:border-primary disabled:bg-neutral-bg disabled:opacity-60"
+          />
+          <Button size="sm" variant={outOfStock ? 'secondary' : 'primary'} disabled={outOfStock} onClick={add}>
+            {outOfStock ? 'Habis' : 'Tambah'}
+          </Button>
+        </div>
+      </td>
+    </tr>
   )
 }

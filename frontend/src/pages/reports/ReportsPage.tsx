@@ -6,6 +6,7 @@ const REPORT_TABS = [
   { path: '/laporan/stok', label: 'Stok' },
   { path: '/laporan/kedaluwarsa', label: 'Kedaluwarsa' },
   { path: '/laporan/laba-rugi', label: 'Laba/Rugi Sederhana' },
+  { path: '/laporan/riwayat-penjualan', label: 'Riwayat Penjualan' },
 ]
 
 export function ReportsPage() {

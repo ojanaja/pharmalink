@@ -26,6 +26,7 @@ const PO_STATUS: Record<string, { label: string; variant: BadgeVariant }> = {
   ordered: { label: 'Dipesan', variant: 'neutral' },
   partially_received: { label: 'Sebagian Diterima', variant: 'warning' },
   received: { label: 'Diterima', variant: 'success' },
+  cancelled: { label: 'Dibatalkan', variant: 'danger' },
 }
 
 export function poStatusLabel(status: string): { label: string; variant: BadgeVariant } {

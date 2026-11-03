@@ -24,8 +24,12 @@ class MedicineController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $medicines = Medicine::query()
-            ->with(['category', 'unit'])
+            ->with(['category', 'unit', 'manufacturer:id,code,name'])
             ->withSum('batches as stock_total', 'quantity_on_hand')
+            // Operasional hanya melihat obat aktif; halaman master data memakai
+            // include_inactive=1 untuk melihat semua.
+            ->when(! $request->boolean('include_inactive'), fn ($q) => $q->where('is_active', true))
+            ->when($request->input('manufacturer_id'), fn ($q, $id) => $q->where('manufacturer_id', $id))
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = $request->string('search')->toString();
                 $query->where(fn ($q) => $q->where('name', 'like', "%{$search}%")
@@ -49,15 +53,15 @@ class MedicineController extends Controller
         $this->authorize('viewAny', Medicine::class);
 
         $medicines = Medicine::query()
-            ->with('unit:id,name')
+            ->with('unit:id,name', 'manufacturer:id,name')
             ->orderBy('code')
-            ->get(['id', 'code', 'name', 'unit_id', 'sale_price', 'min_stock']);
+            ->get(['id', 'code', 'name', 'unit_id', 'manufacturer_id', 'sale_price', 'min_stock']);
 
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Master Data Obat');
 
-        $headers = ['Kode', 'Nama Obat', 'Satuan', 'Harga jual', 'Minimum stok'];
+        $headers = ['Kode', 'Nama Obat', 'Satuan', 'Pabrikan', 'Harga jual', 'Minimum stok'];
         foreach ($headers as $i => $header) {
             $sheet->setCellValueExplicit([$i + 1, 1], $header, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         }
@@ -68,12 +72,14 @@ class MedicineController extends Controller
             $sheet->setCellValueExplicit([1, $row], $medicine->code, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
             $sheet->setCellValueExplicit([2, $row], $medicine->name, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
             $sheet->setCellValueExplicit([3, $row], (string) $medicine->unit?->name, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheet->setCellValueExplicit([4, $row], (float) $medicine->sale_price, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
-            $sheet->setCellValueExplicit([5, $row], (int) $medicine->min_stock, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
+            // Round-trip template konsisten: pabrikan kosong diekspor sebagai '-'.
+            $sheet->setCellValueExplicit([4, $row], (string) ($medicine->manufacturer?->name ?? '-'), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit([5, $row], (float) $medicine->sale_price, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
+            $sheet->setCellValueExplicit([6, $row], (int) $medicine->min_stock, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
             $row++;
         }
 
-        foreach (range('A', 'E') as $col) {
+        foreach (range('A', 'F') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
@@ -89,11 +95,26 @@ class MedicineController extends Controller
         ]);
     }
 
+    /**
+     * Nonaktifkan/aktifkan obat — menggantikan hapus untuk UI (riwayat transaksi
+     * tetap terjaga lewat FK restrict).
+     */
+    public function toggleActive(Medicine $medicine): MedicineResource
+    {
+        $this->authorize('update', $medicine);
+
+        $medicine->is_active = ! $medicine->is_active;
+        $medicine->save();
+
+        return new MedicineResource($medicine->refresh()->load(['category', 'unit', 'manufacturer:id,code,name']));
+    }
+
     public function show(Medicine $medicine): MedicineResource
     {
         return new MedicineResource($medicine->load([
             'category',
             'unit',
+            'manufacturer:id,code,name',
             'batches' => fn ($query) => $query->orderBy('expiry_date'),
         ]));
     }

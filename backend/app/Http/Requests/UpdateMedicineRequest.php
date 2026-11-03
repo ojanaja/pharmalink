@@ -22,6 +22,8 @@ class UpdateMedicineRequest extends FormRequest
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'category_id' => ['sometimes', 'required', 'integer', Rule::exists('categories', 'id')],
             'unit_id' => ['sometimes', 'required', 'integer', Rule::exists('units', 'id')],
+            // Nullable: obat lama tanpa pabrikan tetap boleh diupdate.
+            'manufacturer_id' => ['nullable', 'integer', Rule::exists('manufacturers', 'id')],
             'sale_price' => ['sometimes', 'required', 'numeric', 'min:0', 'decimal:0,2'],
             'min_stock' => ['integer', 'min:0'],
             'description' => ['nullable', 'string'],

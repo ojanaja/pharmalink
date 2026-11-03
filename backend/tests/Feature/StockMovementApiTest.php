@@ -220,7 +220,11 @@ class StockMovementApiTest extends TestCase
     {
         $near = $this->makeBatch($this->medicineA, 'BTH-A-010', today()->addDays(20)->toDateString());
         $near->update(['quantity_on_hand' => 4]);
-        $this->batchA->update(['quantity_on_hand' => 5]); // expiry 2027-01-01, di luar 30 hari
+        // Jauh di luar jendela 60 hari agar tidak kena time-bomb kalender.
+        $this->batchA->update([
+            'quantity_on_hand' => 5,
+            'expiry_date' => today()->addDays(90)->toDateString(),
+        ]);
 
         $this->withToken($this->token())
             ->getJson('/api/batches?expiring_within=30')

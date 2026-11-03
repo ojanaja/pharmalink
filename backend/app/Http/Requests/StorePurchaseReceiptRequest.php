@@ -19,7 +19,11 @@ class StorePurchaseReceiptRequest extends FormRequest
             'supplier_id' => ['nullable', 'integer', Rule::exists('suppliers', 'id')],
             'note' => ['nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.medicine_id' => ['required', 'integer', Rule::exists('medicines', 'id')],
+            'items.*.medicine_id' => [
+                'required', 'integer',
+                // Obat nonaktif tidak boleh diterima.
+                Rule::exists('medicines', 'id')->where('is_active', true),
+            ],
             'items.*.batch_number' => ['required', 'string', 'max:100'],
             'items.*.expiry_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
