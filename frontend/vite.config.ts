@@ -10,6 +10,16 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
   version: string
 }
 
+// Versi otomatis: base dari package.json + nomor commit (selalu naik tiap update; tanggal update terjaga dari commit/build date).
+let commitCount = '0'
+try {
+  commitCount = execSync('git rev-list --count HEAD', { encoding: 'utf-8' }).trim()
+} catch {
+  /* image produksi mengecualikan .git — pakai base version apa adanya */
+}
+const [baseMajor = '1', baseMinor = '0'] = pkg.version.split('.')
+const appVersion = `${baseMajor}.${baseMinor}.${commitCount}`
+
 // Diperbarui: tanggal commit terakhir bila repo git tersedia (dev), fallback tanggal build (image produksi mengecualikan .git).
 let commitDate = ''
 let commitHash = ''
@@ -24,7 +34,7 @@ try {
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(appVersion),
     __APP_UPDATED__: JSON.stringify(commitDate),
     __APP_COMMIT__: JSON.stringify(commitHash),
   },

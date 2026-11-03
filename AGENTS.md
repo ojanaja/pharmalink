@@ -33,6 +33,7 @@ Bangun sistem manajemen apotek mikro/kecil untuk owner dan apoteker. Ruang lingk
 - Perbarui dokumentasi serah-terima terkait saat perilaku, kontrak API/data, atau instruksi setup berubah. Ikuti `docs/DOCUMENTATION_STANDARD.md`.
 - Tambahkan atau jalankan pemeriksaan yang relevan untuk tiap perubahan; laporkan perintah dan hasilnya.
 - Jangan commit, push, deploy, atau menghapus data tanpa instruksi eksplisit.
+- Versi aplikasi di footer otomatis: `major.minor` dari `frontend/package.json` + nomor commit (dihitung saat build di `vite.config.ts`); tanggal update otomatis dari commit/build date. Untuk rilis besar, bump `major.minor` di package.json.
 
 ## Pemakaian agent
 
