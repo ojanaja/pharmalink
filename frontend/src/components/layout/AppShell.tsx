@@ -2,6 +2,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { NAV_ITEMS } from './nav'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
+import { Footer } from './Footer'
 
 export function AppShell() {
   const location = useLocation()
@@ -19,6 +20,7 @@ export function AppShell() {
         <main className="flex-1 p-7">
           <Outlet />
         </main>
+        <Footer />
       </div>
     </div>
   )
