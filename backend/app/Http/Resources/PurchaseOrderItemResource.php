@@ -32,6 +32,13 @@ class PurchaseOrderItemResource extends JsonResource
                     ];
                 }
 
+                if ($this->medicine->relationLoaded('manufacturer')) {
+                    // Null bila obat belum punya pabrikan (data existing).
+                    $medicine['manufacturer'] = $this->medicine->manufacturer === null
+                        ? null
+                        : ['id' => $this->medicine->manufacturer->id, 'name' => $this->medicine->manufacturer->name];
+                }
+
                 return $medicine;
             }),
         ];

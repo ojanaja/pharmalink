@@ -6,10 +6,11 @@ import { Field, Input, Select } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
 import { ApiError, api } from '../../lib/api'
 import { formatRupiah } from '../../lib/format'
-import type { LaravelPaginated, Medicine, Supplier } from '../../lib/types'
+import type { LaravelPaginated, Manufacturer, Medicine, Supplier } from '../../lib/types'
 
 interface PoFormItem {
   medicine_id: number | null
+  manufacturer_id: number | null
   quantity: number
   unit_price: string
 }
@@ -20,7 +21,7 @@ interface PurchaseOrderFormModalProps {
   onCreated: (poNumber: string) => void
 }
 
-const EMPTY_ITEM: PoFormItem = { medicine_id: null, quantity: 1, unit_price: '' }
+const EMPTY_ITEM: PoFormItem = { medicine_id: null, manufacturer_id: null, quantity: 1, unit_price: '' }
 
 export function PurchaseOrderFormModal({ open, onClose, onCreated }: PurchaseOrderFormModalProps) {
   const [supplierId, setSupplierId] = useState('')
@@ -38,6 +39,12 @@ export function PurchaseOrderFormModal({ open, onClose, onCreated }: PurchaseOrd
   const { data: medicines } = useQuery({
     queryKey: ['medicines-all'],
     queryFn: () => api<LaravelPaginated<Medicine>>('/medicines?per_page=100'),
+    enabled: open,
+  })
+  // Dropdown pabrikan refer ke master pabrikan (hanya yang aktif).
+  const { data: manufacturers } = useQuery({
+    queryKey: ['manufacturers-active'],
+    queryFn: () => api<LaravelPaginated<Manufacturer>>('/manufacturers?per_page=100'),
     enabled: open,
   })
 
@@ -157,21 +164,61 @@ export function PurchaseOrderFormModal({ open, onClose, onCreated }: PurchaseOrd
         <div className="flex flex-col gap-2">
           {items.map((item, index) => (
             <div key={index} className="flex items-end gap-2">
+              <div className="w-44 shrink-0">
+                {index === 0 && <span className="mb-1 block text-[11px] text-ink-secondary">Pabrikan</span>}
+                <Select
+                  value={item.manufacturer_id ?? ''}
+                  onChange={(event) => {
+                    const manufacturerId = Number(event.target.value) || null
+                    const stillValid =
+                      manufacturerId === null ||
+                      medicines?.data.find((m) => m.id === item.medicine_id)?.manufacturer?.id ===
+                        manufacturerId
+                    updateItem(index, {
+                      manufacturer_id: manufacturerId,
+                      ...(stillValid ? {} : { medicine_id: null }),
+                    })
+                  }}
+                  aria-label={`Pabrikan item ${index + 1}`}
+                >
+                  <option value="">Semua pabrikan</option>
+                  {manufacturers?.data
+                    .filter((manufacturer) => manufacturer.is_active)
+                    .map((manufacturer) => (
+                      <option key={manufacturer.id} value={manufacturer.id}>
+                        {manufacturer.name}
+                      </option>
+                    ))}
+                </Select>
+              </div>
               <div className="min-w-0 flex-1">
                 {index === 0 && <span className="mb-1 block text-[11px] text-ink-secondary">Obat</span>}
                 <Select
                   value={item.medicine_id ?? ''}
-                  onChange={(event) =>
-                    updateItem(index, { medicine_id: Number(event.target.value) || null })
-                  }
+                  onChange={(event) => {
+                    const medicineId = Number(event.target.value) || null
+                    const medicine = medicines?.data.find((m) => m.id === medicineId)
+                    updateItem(index, {
+                      medicine_id: medicineId,
+                      // Satu master obat = satu pabrikan — pabrikan terisi otomatis dari obat terpilih.
+                      manufacturer_id: medicine?.manufacturer?.id ?? null,
+                    })
+                  }}
                   aria-label={`Obat item ${index + 1}`}
                 >
                   <option value="">Pilih obat…</option>
-                  {medicines?.data.map((medicine) => (
-                    <option key={medicine.id} value={medicine.id}>
-                      {medicine.code} — {medicine.name}
-                    </option>
-                  ))}
+                  {medicines?.data
+                    .filter(
+                      (medicine) =>
+                        item.manufacturer_id === null ||
+                        medicine.manufacturer?.id === item.manufacturer_id,
+                    )
+                    .map((medicine) => (
+                      <option key={medicine.id} value={medicine.id}>
+                        {medicine.code} — {medicine.name}
+                        {medicine.manufacturer ? ` · ${medicine.manufacturer.name}` : ''}
+                      </option>
+                    ))}
                 </Select>
               </div>
               <div className="w-20">

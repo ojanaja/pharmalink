@@ -125,7 +125,10 @@ export function PurchaseOrderDetailPage() {
                     <p className="text-[13px] font-semibold text-ink">
                       {item.medicine?.name ?? '—'}
                     </p>
-                    <p className="text-[11px] text-ink-secondary">{item.medicine?.code ?? ''}</p>
+                    <p className="text-[11px] text-ink-secondary">
+                      {item.medicine?.code ?? ''}
+                      {item.medicine?.manufacturer ? ` · ${item.medicine.manufacturer.name}` : ''}
+                    </p>
                   </td>
                   <td className="px-4 py-3 text-[13px] text-ink-secondary">
                     {item.medicine?.unit?.name ?? '—'}

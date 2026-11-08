@@ -183,7 +183,13 @@ export interface PoItem {
   received_quantity: number | null
   unit_price: string
   subtotal: string
-  medicine: { id: number; code: string; name: string; unit: { id: number; name: string } | null } | null
+  medicine: {
+    id: number
+    code: string
+    name: string
+    unit: { id: number; name: string } | null
+    manufacturer?: { id: number; name: string } | null
+  } | null
 }
 
 export interface PurchaseReceiptItem {

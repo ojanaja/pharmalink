@@ -27,6 +27,12 @@ class PurchaseReceiptItemResource extends JsonResource
                     ];
                 }
 
+                if ($this->medicine->relationLoaded('manufacturer')) {
+                    $medicine['manufacturer'] = $this->medicine->manufacturer === null
+                        ? null
+                        : ['id' => $this->medicine->manufacturer->id, 'name' => $this->medicine->manufacturer->name];
+                }
+
                 return $medicine;
             }),
             'batch' => $this->whenLoaded('batch', fn () => [

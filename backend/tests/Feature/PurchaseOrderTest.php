@@ -43,6 +43,7 @@ class PurchaseOrderTest extends TestCase
         ]);
 
         $this->medicineA = $make('MED-001', 'Paracetamol 500mg');
+        $this->medicineA->update(['manufacturer_id' => \App\Models\Manufacturer::create(['code' => 'MNF-TST', 'name' => 'Kalbe Farma'])->id]);
         $this->medicineB = $make('MED-002', 'Amoxicillin 500mg');
 
         // Harga beli obat A tercatat di pivot supplier; obat B tidak.
@@ -307,6 +308,21 @@ class PurchaseOrderTest extends TestCase
         $again->assertConflict();
         $this->assertStringContainsString('status: cancelled', (string) $again->json('message'));
         $this->assertSame(0, StockMovement::count());
+    }
+
+    public function test_detail_po_item_memuat_manufacturer(): void
+    {
+        $po = $this->withToken($this->token())->postJson('/api/purchase-orders', [
+            'supplier_id' => $this->supplier->id,
+            'items' => [['medicine_id' => $this->medicineA->id, 'quantity' => 10]],
+        ])->assertCreated()->json('data');
+
+        $detail = $this->withToken($this->token())
+            ->getJson("/api/purchase-orders/{$po['id']}")
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame('Kalbe Farma', $detail['items'][0]['medicine']['manufacturer']['name']);
     }
 
     public function test_cancel_po_parsial_atau_received_409(): void
