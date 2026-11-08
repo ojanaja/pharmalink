@@ -64,7 +64,7 @@ export function StockOpnamePage() {
   const displayItems = sortRows(items, countSort, (item, key) => {
     switch (key) {
       case 'obat':
-        return item.medicine.name
+        return item.medicine?.name ?? null
       case 'batch':
         return item.batch.batch_number
       case 'kedaluwarsa':
@@ -254,8 +254,8 @@ export function StockOpnamePage() {
                     return (
                       <tr key={item.id} className="border-t border-line">
                         <td className="px-5 py-2.5">
-                          <p className="text-[13px] font-semibold text-ink">{item.medicine.name}</p>
-                          <p className="text-[11px] text-ink-secondary">{item.medicine.code}</p>
+                          <p className="text-[13px] font-semibold text-ink">{item.medicine?.name ?? '(obat dihapus)'}</p>
+                          <p className="text-[11px] text-ink-secondary">{item.medicine?.code ?? '—'}</p>
                         </td>
                         <td className="px-4 py-2.5 text-[13px] text-ink-secondary">
                           {item.batch.batch_number}
@@ -281,7 +281,7 @@ export function StockOpnamePage() {
                               updateDraft(item.id, { physical: Number(event.target.value) })
                             }
                             className="ml-auto h-8 w-24 text-right"
-                            aria-label={`Stok fisik ${item.medicine.name} ${item.batch.batch_number}`}
+                            aria-label={`Stok fisik ${item.medicine?.name ?? '(obat dihapus)'} ${item.batch.batch_number}`}
                           />
                         </td>
                         <td
@@ -305,7 +305,7 @@ export function StockOpnamePage() {
                               placeholder="Wajib diisi…"
                               invalid={draft.reason.trim().length < 3}
                               className="h-8"
-                              aria-label={`Alasan selisih ${item.medicine.name}`}
+                              aria-label={`Alasan selisih ${item.medicine?.name ?? '(obat dihapus)'}`}
                             />
                           ) : (
                             <span className="text-[11px] text-placeholder">—</span>
@@ -385,8 +385,8 @@ export function StockOpnamePage() {
                     return (
                       <tr key={item.id} className="border-t border-line">
                         <td className="px-5 py-2.5">
-                          <p className="text-[13px] font-semibold text-ink">{item.medicine.name}</p>
-                          <p className="text-[11px] text-ink-secondary">{item.medicine.code}</p>
+                          <p className="text-[13px] font-semibold text-ink">{item.medicine?.name ?? '(obat dihapus)'}</p>
+                          <p className="text-[11px] text-ink-secondary">{item.medicine?.code ?? '—'}</p>
                         </td>
                         <td className="px-4 py-2.5 text-[13px] text-ink-secondary">
                           {item.batch.batch_number}
@@ -733,7 +733,7 @@ function OpnameDetailModal({ opnameId, onClose }: { opnameId: number | null; onC
                 {diffs.map((item) => (
                   <tr key={item.id} className="border-t border-line">
                     <td className="px-3 py-2 text-[13px] font-semibold text-ink">
-                      {item.medicine.name}
+                      {item.medicine?.name ?? '(obat dihapus)'}
                     </td>
                     <td className="px-3 py-2 text-[13px] text-ink-secondary">
                       {item.batch.batch_number}

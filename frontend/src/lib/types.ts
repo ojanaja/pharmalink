@@ -231,7 +231,8 @@ export interface OpnameItem {
   physical_qty: number
   difference: number
   reason: string | null
-  medicine: { id: number; code: string; name: string }
+  /** Null bila obat pernah terhapus (soft delete) setelah snapshot. */
+  medicine: { id: number; code: string; name: string } | null
   batch: { id: number; batch_number: string; expiry_date: string }
 }
 
